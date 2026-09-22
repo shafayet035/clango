@@ -1,0 +1,6 @@
+# Copy to `.dev.vars` for local development. Never set ALLOW_DEV_AUTH in a deployed Worker: it makes
+# the dev identity adapter trust the x-dev-user header, i.e. anyone can be anyone.
+ALLOW_DEV_AUTH=true
+
+# Production: remove the dev adapter and set a real Better Auth secret instead.
+# BETTER_AUTH_SECRET=replace-with-openssl-rand-base64-32

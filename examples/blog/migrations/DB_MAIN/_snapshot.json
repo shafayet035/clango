@@ -1,0 +1,704 @@
+{
+  "version": 1,
+  "tables": [
+    {
+      "name": "blog_author",
+      "kind": "model",
+      "owner": "blog.Author",
+      "columns": [
+        {
+          "name": "id",
+          "property": "id",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "created_at",
+          "property": "createdAt",
+          "type": "INTEGER",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "expression",
+            "sql": "(unixepoch() * 1000)"
+          }
+        },
+        {
+          "name": "updated_at",
+          "property": "updatedAt",
+          "type": "INTEGER",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "expression",
+            "sql": "(unixepoch() * 1000)"
+          }
+        },
+        {
+          "name": "name",
+          "property": "name",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "email",
+          "property": "email",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "avatar",
+          "property": "avatar",
+          "type": "TEXT",
+          "notNull": false
+        }
+      ],
+      "primaryKey": ["id"],
+      "checks": [],
+      "foreignKeys": []
+    },
+    {
+      "name": "blog_post",
+      "kind": "model",
+      "owner": "blog.Post",
+      "columns": [
+        {
+          "name": "id",
+          "property": "id",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "created_at",
+          "property": "createdAt",
+          "type": "INTEGER",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "expression",
+            "sql": "(unixepoch() * 1000)"
+          }
+        },
+        {
+          "name": "updated_at",
+          "property": "updatedAt",
+          "type": "INTEGER",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "expression",
+            "sql": "(unixepoch() * 1000)"
+          }
+        },
+        {
+          "name": "title",
+          "property": "title",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "slug",
+          "property": "slug",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "body",
+          "property": "body",
+          "type": "TEXT",
+          "notNull": false
+        },
+        {
+          "name": "excerpt",
+          "property": "excerpt",
+          "type": "TEXT",
+          "notNull": false
+        },
+        {
+          "name": "status",
+          "property": "status",
+          "type": "TEXT",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "literal",
+            "sql": "'draft'"
+          }
+        },
+        {
+          "name": "published_at",
+          "property": "publishedAt",
+          "type": "INTEGER",
+          "notNull": false
+        },
+        {
+          "name": "author",
+          "property": "author",
+          "type": "TEXT",
+          "notNull": true
+        }
+      ],
+      "primaryKey": ["id"],
+      "checks": [
+        {
+          "name": "blog_post_status_check",
+          "expression": "\"status\" IN ('draft', 'published')"
+        }
+      ],
+      "foreignKeys": [
+        {
+          "columns": ["author"],
+          "refTable": "blog_author",
+          "refColumns": ["id"],
+          "onDelete": "cascade"
+        }
+      ]
+    },
+    {
+      "name": "blog_post_tags",
+      "kind": "join",
+      "columns": [
+        {
+          "name": "post_id",
+          "property": "post_id",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "tag_id",
+          "property": "tag_id",
+          "type": "TEXT",
+          "notNull": true
+        }
+      ],
+      "primaryKey": ["post_id", "tag_id"],
+      "checks": [],
+      "foreignKeys": [
+        {
+          "columns": ["post_id"],
+          "refTable": "blog_post",
+          "refColumns": ["id"],
+          "onDelete": "cascade"
+        },
+        {
+          "columns": ["tag_id"],
+          "refTable": "blog_tag",
+          "refColumns": ["id"],
+          "onDelete": "cascade"
+        }
+      ]
+    },
+    {
+      "name": "blog_tag",
+      "kind": "model",
+      "owner": "blog.Tag",
+      "columns": [
+        {
+          "name": "id",
+          "property": "id",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "created_at",
+          "property": "createdAt",
+          "type": "INTEGER",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "expression",
+            "sql": "(unixepoch() * 1000)"
+          }
+        },
+        {
+          "name": "updated_at",
+          "property": "updatedAt",
+          "type": "INTEGER",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "expression",
+            "sql": "(unixepoch() * 1000)"
+          }
+        },
+        {
+          "name": "name",
+          "property": "name",
+          "type": "TEXT",
+          "notNull": true
+        }
+      ],
+      "primaryKey": ["id"],
+      "checks": [],
+      "foreignKeys": []
+    },
+    {
+      "name": "clango_admin_log",
+      "kind": "model",
+      "owner": "clango.AdminLog",
+      "columns": [
+        {
+          "name": "id",
+          "property": "id",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "created_at",
+          "property": "createdAt",
+          "type": "INTEGER",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "expression",
+            "sql": "(unixepoch() * 1000)"
+          }
+        },
+        {
+          "name": "updated_at",
+          "property": "updatedAt",
+          "type": "INTEGER",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "expression",
+            "sql": "(unixepoch() * 1000)"
+          }
+        },
+        {
+          "name": "action",
+          "property": "action",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "model_name",
+          "property": "modelName",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "object_id",
+          "property": "objectId",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "user_id",
+          "property": "userId",
+          "type": "TEXT",
+          "notNull": false
+        },
+        {
+          "name": "diff",
+          "property": "diff",
+          "type": "TEXT",
+          "notNull": false
+        }
+      ],
+      "primaryKey": ["id"],
+      "checks": [
+        {
+          "name": "clango_admin_log_action_check",
+          "expression": "\"action\" IN ('create', 'update', 'delete')"
+        }
+      ],
+      "foreignKeys": []
+    },
+    {
+      "name": "clango_group",
+      "kind": "model",
+      "owner": "clango.Group",
+      "columns": [
+        {
+          "name": "id",
+          "property": "id",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "created_at",
+          "property": "createdAt",
+          "type": "INTEGER",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "expression",
+            "sql": "(unixepoch() * 1000)"
+          }
+        },
+        {
+          "name": "updated_at",
+          "property": "updatedAt",
+          "type": "INTEGER",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "expression",
+            "sql": "(unixepoch() * 1000)"
+          }
+        },
+        {
+          "name": "name",
+          "property": "name",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "description",
+          "property": "description",
+          "type": "TEXT",
+          "notNull": false
+        }
+      ],
+      "primaryKey": ["id"],
+      "checks": [],
+      "foreignKeys": []
+    },
+    {
+      "name": "clango_group_permission",
+      "kind": "model",
+      "owner": "clango.GroupPermission",
+      "columns": [
+        {
+          "name": "id",
+          "property": "id",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "created_at",
+          "property": "createdAt",
+          "type": "INTEGER",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "expression",
+            "sql": "(unixepoch() * 1000)"
+          }
+        },
+        {
+          "name": "updated_at",
+          "property": "updatedAt",
+          "type": "INTEGER",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "expression",
+            "sql": "(unixepoch() * 1000)"
+          }
+        },
+        {
+          "name": "group",
+          "property": "group",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "codename",
+          "property": "codename",
+          "type": "TEXT",
+          "notNull": true
+        }
+      ],
+      "primaryKey": ["id"],
+      "checks": [],
+      "foreignKeys": [
+        {
+          "columns": ["group"],
+          "refTable": "clango_group",
+          "refColumns": ["id"],
+          "onDelete": "cascade"
+        }
+      ]
+    },
+    {
+      "name": "clango_user",
+      "kind": "model",
+      "owner": "clango.User",
+      "columns": [
+        {
+          "name": "id",
+          "property": "id",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "created_at",
+          "property": "createdAt",
+          "type": "INTEGER",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "expression",
+            "sql": "(unixepoch() * 1000)"
+          }
+        },
+        {
+          "name": "updated_at",
+          "property": "updatedAt",
+          "type": "INTEGER",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "expression",
+            "sql": "(unixepoch() * 1000)"
+          }
+        },
+        {
+          "name": "email",
+          "property": "email",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "auth_id",
+          "property": "authId",
+          "type": "TEXT",
+          "notNull": false
+        },
+        {
+          "name": "name",
+          "property": "name",
+          "type": "TEXT",
+          "notNull": false
+        },
+        {
+          "name": "is_staff",
+          "property": "isStaff",
+          "type": "INTEGER",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "literal",
+            "sql": "0"
+          }
+        },
+        {
+          "name": "is_superuser",
+          "property": "isSuperuser",
+          "type": "INTEGER",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "literal",
+            "sql": "0"
+          }
+        }
+      ],
+      "primaryKey": ["id"],
+      "checks": [],
+      "foreignKeys": []
+    },
+    {
+      "name": "clango_user_group",
+      "kind": "model",
+      "owner": "clango.UserGroup",
+      "columns": [
+        {
+          "name": "id",
+          "property": "id",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "created_at",
+          "property": "createdAt",
+          "type": "INTEGER",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "expression",
+            "sql": "(unixepoch() * 1000)"
+          }
+        },
+        {
+          "name": "updated_at",
+          "property": "updatedAt",
+          "type": "INTEGER",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "expression",
+            "sql": "(unixepoch() * 1000)"
+          }
+        },
+        {
+          "name": "user",
+          "property": "user",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "group",
+          "property": "group",
+          "type": "TEXT",
+          "notNull": true
+        }
+      ],
+      "primaryKey": ["id"],
+      "checks": [],
+      "foreignKeys": [
+        {
+          "columns": ["user"],
+          "refTable": "clango_user",
+          "refColumns": ["id"],
+          "onDelete": "cascade"
+        },
+        {
+          "columns": ["group"],
+          "refTable": "clango_group",
+          "refColumns": ["id"],
+          "onDelete": "cascade"
+        }
+      ]
+    },
+    {
+      "name": "clango_user_permission",
+      "kind": "model",
+      "owner": "clango.UserPermission",
+      "columns": [
+        {
+          "name": "id",
+          "property": "id",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "created_at",
+          "property": "createdAt",
+          "type": "INTEGER",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "expression",
+            "sql": "(unixepoch() * 1000)"
+          }
+        },
+        {
+          "name": "updated_at",
+          "property": "updatedAt",
+          "type": "INTEGER",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "expression",
+            "sql": "(unixepoch() * 1000)"
+          }
+        },
+        {
+          "name": "user",
+          "property": "user",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "codename",
+          "property": "codename",
+          "type": "TEXT",
+          "notNull": true
+        }
+      ],
+      "primaryKey": ["id"],
+      "checks": [],
+      "foreignKeys": [
+        {
+          "columns": ["user"],
+          "refTable": "clango_user",
+          "refColumns": ["id"],
+          "onDelete": "cascade"
+        }
+      ]
+    }
+  ],
+  "indexes": [
+    {
+      "name": "idx_blog_post_author",
+      "table": "blog_post",
+      "columns": ["author"],
+      "unique": false
+    },
+    {
+      "name": "idx_blog_post_published_at",
+      "table": "blog_post",
+      "columns": ["published_at"],
+      "unique": false
+    },
+    {
+      "name": "idx_blog_post_tags_tag_id",
+      "table": "blog_post_tags",
+      "columns": ["tag_id"],
+      "unique": false
+    },
+    {
+      "name": "idx_clango_admin_log_model_name",
+      "table": "clango_admin_log",
+      "columns": ["model_name"],
+      "unique": false
+    },
+    {
+      "name": "idx_clango_admin_log_object_id",
+      "table": "clango_admin_log",
+      "columns": ["object_id"],
+      "unique": false
+    },
+    {
+      "name": "idx_clango_group_permission_codename",
+      "table": "clango_group_permission",
+      "columns": ["codename"],
+      "unique": false
+    },
+    {
+      "name": "idx_clango_group_permission_group",
+      "table": "clango_group_permission",
+      "columns": ["group"],
+      "unique": false
+    },
+    {
+      "name": "idx_clango_user_group_group",
+      "table": "clango_user_group",
+      "columns": ["group"],
+      "unique": false
+    },
+    {
+      "name": "idx_clango_user_group_user",
+      "table": "clango_user_group",
+      "columns": ["user"],
+      "unique": false
+    },
+    {
+      "name": "idx_clango_user_permission_codename",
+      "table": "clango_user_permission",
+      "columns": ["codename"],
+      "unique": false
+    },
+    {
+      "name": "idx_clango_user_permission_user",
+      "table": "clango_user_permission",
+      "columns": ["user"],
+      "unique": false
+    },
+    {
+      "name": "uniq_blog_author_email",
+      "table": "blog_author",
+      "columns": ["email"],
+      "unique": true
+    },
+    {
+      "name": "uniq_blog_post_slug",
+      "table": "blog_post",
+      "columns": ["slug"],
+      "unique": true
+    },
+    {
+      "name": "uniq_blog_tag_name",
+      "table": "blog_tag",
+      "columns": ["name"],
+      "unique": true
+    },
+    {
+      "name": "uniq_clango_group_name",
+      "table": "clango_group",
+      "columns": ["name"],
+      "unique": true
+    },
+    {
+      "name": "uniq_clango_user_auth_id",
+      "table": "clango_user",
+      "columns": ["auth_id"],
+      "unique": true
+    },
+    {
+      "name": "uniq_clango_user_email",
+      "table": "clango_user",
+      "columns": ["email"],
+      "unique": true
+    }
+  ],
+  "fts": [
+    {
+      "table": "blog_post_fts",
+      "sourceTable": "blog_post",
+      "columns": ["body"]
+    }
+  ]
+}

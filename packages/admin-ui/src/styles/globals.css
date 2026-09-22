@@ -1,0 +1,22 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+
+/* The admin is a dense, data-first surface: tighter radii and a neutral palette. */
+@theme {
+  --color-sidebar: #101511;
+  --color-sidebar-foreground: #e5e7eb;
+  --color-sidebar-muted: #9ca3af;
+  --color-canvas: #f6f7f9;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-foreground);
+}

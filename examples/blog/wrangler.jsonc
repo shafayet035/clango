@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "clango-example-blog",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-22",
+  "observability": {
+    "enabled": true,
+  },
+  "assets": {
+    "directory": "../../packages/admin-ui/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    // Every Worker-owned route is listed explicitly. Anything not listed falls through to the SPA,
+    // so a forgotten route shows the admin shell rather than a silent 404 — which is why this is a
+    // positive list instead of a catch-all with exclusions.
+    "run_worker_first": ["/", "/health", "/api/*", "/admin/api/*"],
+  },
+  "d1_databases": [
+    {
+      "binding": "DB_MAIN",
+      "database_name": "clango-blog",
+      // Placeholder UUID. Run `wrangler d1 create clango-blog` and paste the real id before deploying.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations/DB_MAIN",
+    },
+  ],
+}
