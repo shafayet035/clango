@@ -1,7 +1,7 @@
 import { registerAdmin } from "@clango/admin-api";
 
 import { Post } from "./models";
-import { publishPosts } from "./tasks";
+import { exportPostPdf, publishPosts } from "./tasks";
 
 /**
  * Admin customisation. Importing this module for its side effect is what applies it, mirroring how
@@ -30,6 +30,20 @@ registerAdmin(Post, {
           );
         }
         await context.enqueue(publishPosts, { ids: [...ids] });
+      },
+    },
+    {
+      name: "export_pdf",
+      label: "Export as PDF",
+      description: "Renders each selected post's admin page to a PDF in R2.",
+      handler: async (ids, context) => {
+        if (context.enqueue === undefined) {
+          throw new Error("The export action needs a Queues producer.");
+        }
+        // One task per row: a render is slow, and batching several into one message invites a timeout.
+        for (const id of ids) {
+          await context.enqueue(exportPostPdf, { id, origin: "https://example.com" });
+        }
       },
     },
   ],

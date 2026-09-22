@@ -26,5 +26,15 @@ export {
   type AdminFieldset,
   type ModelAdminConfig,
 } from "./registry";
+export {
+  createLockService,
+  DEFAULT_LOCK_TTL_SECONDS,
+  lockKeyFor,
+  RowLockDurableObject,
+  type LockGrant,
+  type LockRefusal,
+  type LockService,
+  type LockServiceOptions,
+} from "./locks";
 export { adminApiPathFor, createAdminApp, mountAdmin } from "./routes";
 export type { ClangoAuthVariables } from "@clango/auth";

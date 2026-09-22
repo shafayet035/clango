@@ -53,6 +53,20 @@ export interface TasksConfig {
   readonly queue?: string;
 }
 
+/**
+ * Row edit locks.
+ *
+ * Locks live in a pool of Durable Objects, because "is this row being edited?" needs an atomic
+ * check-and-set and D1 has no row locks. The binding is declared here and the class is exported by
+ * the application's Worker entry (D-060).
+ */
+export interface LocksConfig {
+  /** Durable Object binding name. */
+  readonly binding: string;
+  /** Number of shards the lock pool is spread across. Defaults to 16. */
+  readonly shards?: number;
+}
+
 /** KV-backed caching for read-heavy, staleness-tolerant data. */
 export interface CacheConfig {
   /** KV binding name. */
@@ -100,6 +114,8 @@ export interface ClangoConfig<TApps extends readonly App[] = readonly App[]> {
   tasks?: TasksConfig;
   /** Enables database-per-tenant routing. */
   tenants?: TenantsConfig;
+  /** Enables row edit locks. */
+  locks?: LocksConfig;
 }
 
 /**
@@ -194,6 +210,12 @@ export function defineConfig<const TApps extends readonly App[]>(
     if (config.auth.database !== undefined && typeof config.auth.database !== "string") {
       throw new ModelDefinitionError("defineConfig `auth.database` must be a string.");
     }
+  }
+  if (
+    config.locks !== undefined &&
+    (typeof config.locks.binding !== "string" || config.locks.binding.length === 0)
+  ) {
+    throw new ModelDefinitionError("defineConfig `locks.binding` must be a non-empty string.");
   }
   if (config.files !== undefined) {
     for (const key of [

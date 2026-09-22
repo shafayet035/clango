@@ -31,7 +31,13 @@ export interface AdminFieldMeta {
   readonly name: string;
   readonly label: string;
   readonly kind: FieldKind;
+  /** The built-in control this field would use. */
   readonly widget: AdminWidget;
+  /**
+   * Name of a custom widget registered in the SPA. The server never interprets it; the SPA looks it
+   * up and falls back to {@link AdminFieldMeta.widget} when nothing is registered.
+   */
+  readonly customWidget?: string;
   /** Value must be supplied on create. */
   readonly required: boolean;
   /** Field accepts `null`. */

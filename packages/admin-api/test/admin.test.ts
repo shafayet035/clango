@@ -62,6 +62,7 @@ registerAdmin(Post, {
   listFilter: ["status", "author"],
   searchFields: ["title", "body"],
   readonlyFields: ["slug"],
+  widgets: { body: "markdown" },
   fieldsets: [
     { title: "Content", fields: ["title", "slug", "body"] },
     { title: "Publishing", fields: ["status", "author"] },
@@ -78,6 +79,18 @@ registerAdmin(Post, {
   ],
 });
 registerAdmin(Secret, { hidden: true });
+
+describe("registerAdmin validation", () => {
+  it("rejects a widget for a field that does not exist", () => {
+    expect(() => registerAdmin(Author, { widgets: { nope: "markdown" } })).toThrow();
+  });
+
+  it("rejects an action name that is not lower_snake_case", () => {
+    expect(() =>
+      registerAdmin(Author, { actions: [{ name: "Publish", label: "P", handler: () => {} }] }),
+    ).toThrow();
+  });
+});
 
 let admin: Hono<{ Bindings: object; Variables: ClangoAuthVariables }>;
 
@@ -162,6 +175,18 @@ describe("meta", () => {
     expect(field("slug")?.editable).toBe(false);
     expect(field("id")?.editable).toBe(false);
     expect(field("createdAt")?.editable).toBe(false);
+  });
+
+  it("passes a custom widget name through for the SPA to resolve", async () => {
+    const meta = (await request("/admin/api/meta")).body as {
+      models: { name: string; fields: { name: string; widget: string; customWidget?: string }[] }[];
+    };
+    const field = meta.models
+      .find((model) => model.name === "blog.Post")
+      ?.fields.find((entry) => entry.name === "body");
+    // The built-in control is still reported, so an unregistered widget degrades instead of vanishing.
+    expect(field?.widget).toBe("textarea");
+    expect(field?.customWidget).toBe("markdown");
   });
 
   it("carries list, filter, search and fieldset configuration", async () => {

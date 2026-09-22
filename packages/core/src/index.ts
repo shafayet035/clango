@@ -44,6 +44,7 @@ export {
   type ClangoConfig,
   type DatabaseConfig,
   type FilesConfig,
+  type LocksConfig,
   type RegisteredModel,
   type TasksConfig,
   type Registry,

@@ -85,13 +85,19 @@ function optionsOf(field: Field): Record<string, unknown> {
   return (field.options ?? {}) as Record<string, unknown>;
 }
 
-function buildFieldMeta(property: string, field: Field, readonly: boolean): AdminFieldMeta {
+function buildFieldMeta(
+  property: string,
+  field: Field,
+  readonly: boolean,
+  customWidget?: string,
+): AdminFieldMeta {
   const options = optionsOf(field);
   const meta: {
     name: string;
     label: string;
     kind: FieldKind;
     widget: AdminWidget;
+    customWidget?: string;
     required: boolean;
     nullable: boolean;
     editable: boolean;
@@ -110,6 +116,7 @@ function buildFieldMeta(property: string, field: Field, readonly: boolean): Admi
     editable: !readonly,
   };
 
+  if (customWidget !== undefined) meta.customWidget = customWidget;
   if (typeof options["helpText"] === "string") meta.helpText = options["helpText"];
   if (field.values !== undefined) meta.choices = field.values;
   if (typeof options["max"] === "number" && field.kind !== "text") {
@@ -167,7 +174,12 @@ function buildModelMeta(model: AnyModel, allows: Allows): AdminModelMeta {
 
   const fields: readonly AdminFieldMeta[] = [
     ...columnsOf(model).map((property) =>
-      buildFieldMeta(property, model.fields[property] as Field, readonly.has(property)),
+      buildFieldMeta(
+        property,
+        model.fields[property] as Field,
+        readonly.has(property),
+        config.widgets?.[property],
+      ),
     ),
     ...AUTOMATIC.map((property) => {
       const field = automaticField(property);

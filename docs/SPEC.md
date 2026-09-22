@@ -621,16 +621,36 @@ SPA as static assets rather than inside the Worker bundle.
 
 ## Implementation status
 
-| Milestone                | Status      | Evidence                                                                                                                                                                          |
-| ------------------------ | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M0 — Scaffold            | **Done**    | pnpm workspace, TS strict, `@cloudflare/vitest-plugin` test pool, CI workflow, `examples/blog` under `wrangler dev`                                                               |
-| M1 — Models + migrations | **Done**    | `@clango/core`, `@clango/orm`, `@clango/migrate`, `@clango/cli`; 139 tests; blog migrations applied via both `db.batch` and `wrangler d1 migrations apply`                        |
-| M2 — Generated REST API  | **Done**    | `@clango/api`; 212 tests workspace-wide; create/list/filter/search/paginate/update/delete verified against D1 and over `wrangler dev`                                             |
-| M3 — Admin v1            | **Done**    | `@clango/admin-api` + `@clango/admin-ui` (HeroUI v3); 284 tests workspace-wide; admin API, audit log, cascade preview and SPA routing verified against D1 and over `wrangler dev` |
-| M4 — Auth + permissions  | **Done**    | `@clango/auth` + `@clango/auth-better-auth`; staff gate, per-operation permissions, groups, `createsuperuser`; 327 tests workspace-wide                                           |
-| M5 — Files, tasks, cache | **Done**    | `@clango/files` (R2 presign, cleanup, orphan sweep), `@clango/tasks` (Queues, cron, CSV), `@clango/cache` (KV); 431 tests workspace-wide                                          |
-| M6 — Scale features      | **Done**    | multi-database routing with cross-DB relation errors, binding-pool tenancy with `migrate --all-tenants`, per-request D1 sessions, driver seam; 460 tests workspace-wide           |
-| M7 — Polish              | Not started |                                                                                                                                                                                   |
+| Milestone                | Status   | Evidence                                                                                                                                                                          |
+| ------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M0 — Scaffold            | **Done** | pnpm workspace, TS strict, `@cloudflare/vitest-plugin` test pool, CI workflow, `examples/blog` under `wrangler dev`                                                               |
+| M1 — Models + migrations | **Done** | `@clango/core`, `@clango/orm`, `@clango/migrate`, `@clango/cli`; 139 tests; blog migrations applied via both `db.batch` and `wrangler d1 migrations apply`                        |
+| M2 — Generated REST API  | **Done** | `@clango/api`; 212 tests workspace-wide; create/list/filter/search/paginate/update/delete verified against D1 and over `wrangler dev`                                             |
+| M3 — Admin v1            | **Done** | `@clango/admin-api` + `@clango/admin-ui` (HeroUI v3); 284 tests workspace-wide; admin API, audit log, cascade preview and SPA routing verified against D1 and over `wrangler dev` |
+| M4 — Auth + permissions  | **Done** | `@clango/auth` + `@clango/auth-better-auth`; staff gate, per-operation permissions, groups, `createsuperuser`; 327 tests workspace-wide                                           |
+| M5 — Files, tasks, cache | **Done** | `@clango/files` (R2 presign, cleanup, orphan sweep), `@clango/tasks` (Queues, cron, CSV), `@clango/cache` (KV); 431 tests workspace-wide                                          |
+| M6 — Scale features      | **Done** | multi-database routing with cross-DB relation errors, binding-pool tenancy with `migrate --all-tenants`, per-request D1 sessions, driver seam; 460 tests workspace-wide           |
+| M7 — Polish              | **Done** | `clango init`/`startapp`, custom admin widgets, sharded Durable Object row locks, Browser Rendering PDF export as a task, and a Markdown guide                                    |
+
+M7 evidence, recorded 2026-09-22:
+
+- **Generators.** `clango init <dir>` was run for real: the project installed, typechecked, produced
+  its first migration, applied it to a local D1, and then answered `/health`, accepted a `POST`, and
+  returned an FTS5 search hit under `wrangler dev`. `clango startapp` writes an app with a model and
+  an admin registration. Template output is unit-tested, including the version override and the
+  skip-if-exists marking.
+- **Row locks.** Tested against a real Durable Object in the Workers pool: the first caller is
+  granted, a second holder is refused with the holder's name, re-acquiring keeps the token, release
+  needs the right token, an unknown token does not release, and different rows are independent.
+- **Custom widgets.** The metadata carries the widget name alongside the built-in control, the SPA
+  registry is unit-tested, and `registerAdmin` rejects a widget for a field that does not exist.
+- **PDF export.** `renderPdf` and `createPdfExporter` are tested with an injectable launcher: the
+  browser is closed even when navigation fails (or a concurrent-browser slot leaks), the caller's
+  cookie is forwarded, print options pass through, and render/store report separately so a Workflow
+  could retry one without the other. The blog exposes it as an admin action that enqueues one task per
+  row; the browser itself needs a deployed Worker, which is recorded rather than pretended.
+- **Docs.** `docs/guide/` covers getting started, models and migrations, the API, the admin, auth,
+  background work and scaling.
 
 M6 evidence, recorded 2026-09-22:
 
@@ -733,7 +753,7 @@ before anything else is added.
 | M4  | Auth + permissions  | ✅ `AuthAdapter` interface + Better Auth adapter; auto model permissions; groups; `isStaff` gate; `clango createsuperuser`; admin hides what users can't access; tests for each permission                                                                                                                                               |
 | M5  | Files, tasks, cache | ✅ R2 file/image fields with presigned uploads (aws4fetch + S3 token + CORS), orphan sweep and delete cleanup; `defineTask` on Queues with DLQ and per-message ack/retry; admin bulk actions enqueue query descriptors; Workflows CSV import/export; cron schedules; KV cache helpers                                                    |
 | M6  | Scale features      | ✅ Multi-database routing with cross-DB relation errors; **tenant-resolution spike completed and recorded**; database-per-tenant mode and `migrate --all-tenants`; D1 read replicas via Sessions API; driver interface for future Postgres                                                                                               |
-| M7  | Polish              | Browser Rendering PDF export action (Workflow-backed); row edit locks via a sharded Durable Object pool; custom admin widgets; `clango init` / `startapp` generators; docs site                                                                                                                                                          |
+| M7  | Polish              | ✅ Browser Rendering PDF export action (Workflow-backed); row edit locks via a sharded Durable Object pool; custom admin widgets; `clango init` / `startapp` generators; docs site                                                                                                                                                       |
 
 Each milestone ends with the Definition of done checklist from the Instructions section.
 
@@ -885,3 +905,17 @@ Recorded at the end of M1, after verifying the migration engine against the Work
     parts are named as the work a Postgres driver would owe (D-056).
 43. Recorded that the CLI bundle must be rebuilt after a framework change, and why that produced a
     misleading "no changes detected" (D-058).
+
+## Change log (M7)
+
+44. `clango init` and `clango startapp` generate a project and an app; the generated project was
+    verified end to end, and the templates emit `workspace:*` until the packages are published
+    (D-063).
+45. Custom admin widgets via a name passed through the metadata and resolved in a SPA registry, with
+    an app building its own bundle when it uses them (D-059).
+46. Row edit locks as a sharded Durable Object pool with absolute expiries and a single rescheduled
+    alarm (D-060).
+47. PDF export implemented on Browser Rendering with an injectable launcher, driven by a Queue task
+    rather than a Workflow because it is a single step (D-062).
+48. The guide lives in `docs/guide/` as Markdown; a hosted site is deferred with that reasoning
+    recorded (D-061).

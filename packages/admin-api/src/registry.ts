@@ -53,6 +53,13 @@ export interface ModelAdminConfig {
   readonly searchFields?: readonly string[];
   /** Columns shown but never editable. */
   readonly readonlyFields?: readonly string[];
+  /**
+   * Names of custom widgets to render for specific fields.
+   *
+   * The name is opaque to the server: it is passed through in the metadata and looked up in the SPA's
+   * widget registry, which falls back to the built-in control when nothing is registered (D-059).
+   */
+  readonly widgets?: Readonly<Record<string, string>>;
   /** Groups the edit form. Defaults to a single fieldset with every editable column. */
   readonly fieldsets?: readonly AdminFieldset[];
   /** Default list ordering. Defaults to the model's `meta.ordering`. */
@@ -81,6 +88,13 @@ function assertFields(model: AnyModel, config: ModelAdminConfig): void {
           `Model "${model.name}" admin ${name} references "${property}", which is not a field.`,
         );
       }
+    }
+  }
+  for (const property of Object.keys(config.widgets ?? {})) {
+    if (resolveField(model.fields, property) === undefined) {
+      throw new ModelDefinitionError(
+        `Model "${model.name}" admin widgets references "${property}", which is not a field.`,
+      );
     }
   }
   for (const fieldset of config.fieldsets ?? []) {

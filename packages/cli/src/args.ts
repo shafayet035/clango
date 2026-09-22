@@ -4,7 +4,8 @@
  */
 
 /** A command the CLI understands. */
-export type CliCommand = "makemigrations" | "migrate" | "createsuperuser" | "help" | "version";
+export type CliCommand =
+  "makemigrations" | "migrate" | "createsuperuser" | "init" | "startapp" | "help" | "version";
 
 /** Where migrations should be applied. */
 export type MigrationTarget = "default" | "local" | "remote";
@@ -26,6 +27,8 @@ export interface CliOptions {
   readonly email?: string;
   /** Applies migrations to every active tenant, not just the project's own database. */
   readonly allTenants: boolean;
+  /** Directory for `init`, or app name for `startapp`. */
+  readonly subject?: string;
 }
 
 /** The result of parsing `process.argv.slice(2)`. */
@@ -49,9 +52,14 @@ const COMMANDS: readonly CliCommand[] = [
   "makemigrations",
   "migrate",
   "createsuperuser",
+  "init",
+  "startapp",
   "help",
   "version",
 ];
+
+/** Commands that take a positional argument after the command name. */
+const POSITIONAL_COMMANDS: readonly CliCommand[] = ["init", "startapp"];
 
 function requireValue(argv: readonly string[], index: number, flag: string): string {
   const value = argv[index + 1];
@@ -76,6 +84,7 @@ export function parseArgs(argv: readonly string[]): ParsedCommand {
     migrationsDir: string;
     email?: string;
     allTenants: boolean;
+    subject?: string;
   } = {
     config: DEFAULT_CONFIG_PATH,
     allowDestructive: false,
@@ -86,20 +95,25 @@ export function parseArgs(argv: readonly string[]): ParsedCommand {
   };
 
   let command: CliCommand | undefined;
+  let positional: string | undefined;
 
   for (let index = 0; index < argv.length; index++) {
     const argument = argv[index] as string;
 
     if (!argument.startsWith("-")) {
-      if (command !== undefined) {
+      if (command === undefined) {
+        if (!(COMMANDS as readonly string[]).includes(argument)) {
+          throw new CliUsageError(
+            `Unknown command "${argument}". Expected one of ${COMMANDS.join(", ")}.`,
+          );
+        }
+        command = argument as CliCommand;
+        continue;
+      }
+      if (!POSITIONAL_COMMANDS.includes(command) || positional !== undefined) {
         throw new CliUsageError(`Unexpected argument "${argument}".`);
       }
-      if (!(COMMANDS as readonly string[]).includes(argument)) {
-        throw new CliUsageError(
-          `Unknown command "${argument}". Expected one of ${COMMANDS.join(", ")}.`,
-        );
-      }
-      command = argument as CliCommand;
+      positional = argument;
       continue;
     }
 
@@ -170,6 +184,10 @@ export function parseArgs(argv: readonly string[]): ParsedCommand {
     throw new CliUsageError('"--all-tenants" is only valid for "clango migrate".');
   }
 
+  if (POSITIONAL_COMMANDS.includes(command) && positional !== undefined) {
+    options.subject = positional;
+  }
+
   return { command, options };
 }
 
@@ -182,6 +200,8 @@ export function renderHelp(version: string): string {
     "  clango makemigrations [options]   Diff the models against the last snapshot and write SQL",
     "  clango migrate [options]          Apply pending migrations with wrangler",
     "  clango createsuperuser [options]  Appoint a superuser by email, before they sign in",
+    "  clango init [directory]           Scaffold a new project",
+    "  clango startapp <name>            Scaffold an app inside the current project",
     "",
     "Options:",
     `  --config <path>          Config file (default: ${DEFAULT_CONFIG_PATH})`,

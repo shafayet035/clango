@@ -8,8 +8,8 @@ Orientation for this repo. Read this first, then `docs/SPEC.md`.
 schema, migrations, a REST API and a generic admin panel. `docs/SPEC.md` is the authoritative spec;
 `docs/DECISIONS.md` records every non-obvious choice (ADR style, append-only).
 
-**Status:** M0–M6 complete (scaffold, models + migrations, REST API, admin, auth + permissions,
-files/tasks/cache, scale features). Next: M7 (polish).
+**Status:** M0–M7 complete — every milestone in `docs/SPEC.md` has shipped. The remaining work is
+listed under "Open work" below.
 
 ## Non-negotiables
 
@@ -23,6 +23,19 @@ files/tasks/cache, scale features). Next: M7 (polish).
 - Public APIs get TSDoc and at least one test.
 - Prefer small, composable packages over one large one.
 - Do not add code comments unless they explain a non-obvious decision.
+
+## Open work
+
+Known gaps, all recorded in `docs/SPEC.md` or `docs/DECISIONS.md`:
+
+- No sign-in UI: the admin explains a `401` instead of rendering a form.
+- Workflows are used for neither CSV import/export nor PDF export; both are Queue tasks today
+  (D-062), and the Workflow runtime is not exercised in tests.
+- `run_worker_first` is maintained by hand; generating it from the registered routes would remove the
+  footgun in D-054.
+- `docs/guide/` is Markdown with no hosted site (D-061).
+- No Postgres driver — only the seam (D-056).
+- Tenancy is capped by the binding ceiling; dispatch namespaces are the next step past it (D-055).
 
 ## Layout
 

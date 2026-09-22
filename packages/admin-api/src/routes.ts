@@ -56,6 +56,13 @@ import {
 } from "@clango/auth";
 
 import { cascadePreview } from "./cascade";
+// The class is imported as a type here; `index.ts` re-exports the value so the Worker can bind it.
+import {
+  createLockService,
+  lockKeyFor,
+  type LockService,
+  type RowLockDurableObject,
+} from "./locks";
 import { adminLogValues, buildUpdateDiff } from "./log";
 import { adminKeyFor, buildMeta, labelFieldOf } from "./meta";
 import { adminConfigFor, type AdminActionContext } from "./registry";
@@ -173,14 +180,25 @@ interface AdminContext<TBindings extends object> {
   readonly storageFor?: (env: object) => FileStorage;
   /** Present when a Queues producer is configured. */
   readonly enqueuerFor?: (env: object) => Enqueuer;
+  /** Present when row locks are configured. */
+  readonly locksFor?: (env: object) => LockService;
 }
 
 function registerModelRoutes<TBindings extends object>(
   context: AdminContext<TBindings>,
   entry: RegisteredModel,
 ): void {
-  const { app, registry, logTable, databaseFor, bindingFor, authEnabled, storageFor, enqueuerFor } =
-    context;
+  const {
+    app,
+    registry,
+    logTable,
+    databaseFor,
+    bindingFor,
+    authEnabled,
+    storageFor,
+    enqueuerFor,
+    locksFor,
+  } = context;
   const model = entry.model;
 
   /**
@@ -396,6 +414,55 @@ function registerModelRoutes<TBindings extends object>(
     return c.json({ data: { model: model.name, id, related } });
   });
 
+  if (locksFor !== undefined) {
+    /**
+     * Row edit locks.
+     *
+     * Advisory by design: they stop two people from silently overwriting each other, and they expire
+     * on their own so a closed tab cannot hold a row forever. Taking a lock needs the same permission
+     * as changing the row.
+     */
+    app.get(`${base}/:id/lock`, async (c) => {
+      authorize(c, "change");
+      const lock = await locksFor(c.env).status(lockKeyFor(model.name, c.req.param("id")));
+      return c.json({ data: lock });
+    });
+
+    app.post(`${base}/:id/lock`, async (c) => {
+      const user = authorize(c, "change");
+      const body = (await readJsonBody(c.req.raw)) as { ttlSeconds?: unknown };
+      const ttlSeconds = body.ttlSeconds === undefined ? undefined : Number(body.ttlSeconds);
+      if (
+        ttlSeconds !== undefined &&
+        (!Number.isInteger(ttlSeconds) || ttlSeconds < 30 || ttlSeconds > 3600)
+      ) {
+        throw badRequest("ttlSeconds must be an integer between 30 and 3600.");
+      }
+
+      const holder = user?.id ?? "anonymous";
+      const result = await locksFor(c.env).acquire(
+        lockKeyFor(model.name, c.req.param("id")),
+        holder,
+        ttlSeconds,
+      );
+      // A refusal is not an error: the caller needs to know who holds it and until when.
+      return c.json({ data: result }, "heldBy" in result ? 409 : 200);
+    });
+
+    app.delete(`${base}/:id/lock`, async (c) => {
+      authorize(c, "change");
+      const body = (await readJsonBody(c.req.raw)) as { token?: unknown };
+      if (typeof body.token !== "string" || body.token.length === 0) {
+        throw badRequest('Expected a body of the form { "token": "…" }.');
+      }
+      const released = await locksFor(c.env).release(
+        lockKeyFor(model.name, c.req.param("id")),
+        body.token,
+      );
+      return c.json({ data: { released } });
+    });
+  }
+
   app.get(`${base}/:id`, async (c) => {
     const id = c.req.param("id");
     const rows = asRecords(await db(c).select().from(table).where(eq(idColumn, id)).limit(1).all());
@@ -560,6 +627,27 @@ export function createAdminApp<TBindings extends object = object>(
           return enqueuer;
         };
 
+  const locksBinding = config.locks?.binding;
+  const lockServices = new WeakMap<object, LockService>();
+  const locksFor =
+    locksBinding === undefined
+      ? undefined
+      : (env: object) => {
+          let service = lockServices.get(env);
+          if (service === undefined) {
+            const namespace = (env as Record<string, unknown>)[locksBinding];
+            if (namespace === undefined) {
+              throw new ClangoError(`Missing Durable Object binding "${locksBinding}".`);
+            }
+            service = createLockService({
+              namespace: namespace as DurableObjectNamespace<RowLockDurableObject>,
+              ...(config.locks?.shards === undefined ? {} : { shards: config.locks.shards }),
+            });
+            lockServices.set(env, service);
+          }
+          return service;
+        };
+
   const context: AdminContext<TBindings> = {
     app,
     registry,
@@ -569,6 +657,7 @@ export function createAdminApp<TBindings extends object = object>(
     authEnabled,
     ...(storageFor === undefined ? {} : { storageFor }),
     ...(enqueuerFor === undefined ? {} : { enqueuerFor }),
+    ...(locksFor === undefined ? {} : { locksFor }),
   };
 
   const downloadPath = config.files?.downloadPath ?? "/files";

@@ -1,5 +1,6 @@
 import { CliUsageError, parseArgs, renderHelp } from "./args";
 import { runCreatesuperuser } from "./command-createsuperuser";
+import { runInit, runStartapp } from "./generate";
 import { runMakemigrations } from "./makemigrations";
 import { runMigrate } from "./migrate";
 import { VERSION } from "./version";
@@ -35,6 +36,12 @@ export async function main(argv: readonly string[], cwd: string, io: CliIo): Pro
         return 0;
       case "createsuperuser":
         await runCreatesuperuser(options, cwd, io.log);
+        return 0;
+      case "init":
+        await runInit(options, cwd, io.log);
+        return 0;
+      case "startapp":
+        await runStartapp(options, cwd, io.log);
         return 0;
     }
   } catch (error) {

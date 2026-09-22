@@ -11,6 +11,10 @@
       "database_id": "00000000-0000-0000-0000-000000000000",
     },
   ],
+  "durable_objects": {
+    "bindings": [{ "name": "ROW_LOCKS", "class_name": "RowLockDurableObject" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RowLockDurableObject"] }],
   "vars": {
     "R2_ACCOUNT_ID": "testaccount",
     "R2_ACCESS_KEY_ID": "testkey",

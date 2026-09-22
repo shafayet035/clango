@@ -3,8 +3,9 @@
 A Django-style framework for Cloudflare Workers. Define models in apps and Clango generates the
 database schema, migrations, a REST API and a full admin panel.
 
-> **Status:** M0–M6 complete: scaffold, models + migrations, generated REST API, admin,
-> auth + permissions, files/tasks/cache, and scale features. See `docs/SPEC.md`.
+> **Status:** M0–M7 complete — every milestone in the spec has shipped. See `docs/SPEC.md` for the
+> authoritative spec, `docs/guide/` for task-oriented documentation, and `docs/DECISIONS.md` for the
+> reasoning behind 60+ non-obvious choices.
 
 ## What works today
 
@@ -124,7 +125,14 @@ docs/         SPEC.md — the spec; DECISIONS.md — the ADR log
 | `pnpm test`      | Vitest inside the Workers runtime  |
 | `pnpm dev`       | `wrangler dev` for `examples/blog` |
 
-Read `CLAUDE.md` for conventions and `docs/SPEC.md` for the authoritative spec.
+## Documentation
+
+- [`docs/guide/`](docs/guide/README.md) — getting started, models and migrations, the API, the admin,
+  auth, background work, scaling.
+- [`docs/SPEC.md`](docs/SPEC.md) — the authoritative spec, milestone by milestone.
+- [`docs/DECISIONS.md`](docs/DECISIONS.md) — 60+ ADR entries recording why things are the way they are.
+
+Read `CLAUDE.md` for the conventions this repo follows.
 
 ## Scaling out
 

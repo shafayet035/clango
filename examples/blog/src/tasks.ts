@@ -1,4 +1,5 @@
-import { defineSchedule, defineTask } from "@clango/tasks";
+import { createPdfExporter, defineSchedule, defineTask, type BrowserLauncher } from "@clango/tasks";
+import puppeteer from "@cloudflare/puppeteer";
 import { z } from "zod";
 
 import { Post } from "./models";
@@ -48,3 +49,46 @@ export const dailyMaintenance = defineSchedule(
 );
 
 export { Post };
+
+/**
+ * Renders a post's admin page to PDF and stores it in R2.
+ *
+ * Behind a task because rendering is slow and may exceed the Worker CPU budget. The launcher is
+ * bound to the Worker's browser binding here, which is why this cannot be exercised in the test pool:
+ * Browser Rendering needs a deployed browser, not a local stub.
+ */
+export const exportPostPdf = defineTask(
+  "blog.export_post_pdf",
+  z.object({ id: z.string().min(1), origin: z.string().url() }),
+  async (payload, context) => {
+    const env = context.env as Record<string, unknown>;
+    const browser = env["BROWSER"];
+    const files = env["FILES"];
+    if (browser === undefined || files === undefined) {
+      throw new Error('The PDF export needs the "BROWSER" and "FILES" bindings.');
+    }
+
+    const launcher: BrowserLauncher = {
+      launch: async () =>
+        (await puppeteer.launch(browser as never)) as unknown as Awaited<
+          ReturnType<BrowserLauncher["launch"]>
+        >,
+    };
+    const bucket = files as R2Bucket;
+
+    const exporter = createPdfExporter({
+      launcher,
+      store: {
+        put: async (key, value) => {
+          await bucket.put(key, value, { httpMetadata: { contentType: "application/pdf" } });
+        },
+      },
+    });
+
+    const result = await exporter.export(
+      `${payload.origin}/admin/blog/post/${payload.id}`,
+      `exports/blog/post-${payload.id}.pdf`,
+    );
+    console.log(`exported ${result.key} (${result.bytes} bytes)`);
+  },
+);

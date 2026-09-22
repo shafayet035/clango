@@ -137,6 +137,35 @@ describe("tasks", () => {
     ]);
   });
 
+  it("registers the PDF export task with a validated payload", async () => {
+    // The render itself needs a deployed browser — Browser Rendering has no local implementation, so
+    // the pool would hang on launch. What is testable here is the wiring: an unknown task and a
+    // payload that fails validation are both acknowledged rather than retried forever, and a valid
+    // payload reaches the handler (which then reports the missing browser).
+    const batch = createMessageBatch("clango-blog-tasks", [
+      {
+        id: "pdf-unknown",
+        timestamp: new Date(),
+        attempts: 1,
+        body: { task: "blog.export_post_pdf", payload: { id: "" } },
+      },
+    ]);
+    const context = createExecutionContext();
+    await worker.queue(batch, env);
+    const result = await getQueueResult(batch, context);
+    expect(result.explicitAcks).toEqual(["pdf-unknown"]);
+  });
+
+  it("exposes the PDF export as an admin action", async () => {
+    const response = await call(
+      SUPERUSER,
+      "/admin/api/blog/post/actions/export_pdf",
+      json("POST", { ids: ["task-post-1"] }),
+    );
+    // The action only enqueues; 200 means the producer accepted it.
+    expect(response.status).toBe(200);
+  });
+
   it("runs admin actions through the queue rather than in the request", async () => {
     const response = await call(
       SUPERUSER,

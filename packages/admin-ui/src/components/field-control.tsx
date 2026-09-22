@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { fetchOptions, listKeys } from "@/features/list/_api";
 import { modelKeyOf } from "@/features/models/_lib/model";
+import { widgetByName } from "@/lib/widgets";
 import type { FormValue } from "@/features/form/_lib/values";
 
 interface FieldControlProps {
@@ -21,6 +22,13 @@ export function FieldControl({
   onChange,
   disabled = false,
 }: FieldControlProps): React.ReactElement {
+  // A custom widget wins over the built-in control, and a name nobody registered falls through, so
+  // a renamed widget degrades to the default instead of blanking the field.
+  const Custom = field.customWidget === undefined ? undefined : widgetByName(field.customWidget);
+  if (Custom !== undefined) {
+    return <Custom field={field} value={value} onChange={onChange} disabled={disabled} />;
+  }
+
   const text = typeof value === "string" ? value : "";
 
   switch (field.widget) {

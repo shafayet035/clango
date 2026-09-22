@@ -844,3 +844,76 @@ controller,service,schema}.ts`. That structure pays off when each feature has ha
   through `pnpm install`; only a long-running local session hits this.
 - **Consequences:** A misleading "no changes detected" is the symptom, which costs more time to
   diagnose than the rebuild takes. Noted in `CLAUDE.md`.
+
+## D-059 — Custom widgets mean an app builds its own admin bundle
+
+- **Status:** Accepted · 2026-09-22
+- **Context:** Custom admin widgets are React components, which cannot be added to a SPA that was
+  built before the application existed. The alternative — shipping a plugin runtime into the admin —
+  is a security surface and a bundle-size cost for a feature most projects never use.
+- **Decision:** The admin UI exports a public entry (`mountAdminUi`, `registerWidget`). The default
+  path keeps using the prebuilt bundle in `packages/admin-ui/dist`; an app that wants custom widgets
+  imports the package, registers them before the first render, and builds its own bundle. The server
+  never interprets a widget name: `registerAdmin(Model, { widgets })` passes it through in the
+  metadata, and the SPA looks it up, falling back to the built-in control.
+- **Consequences:** No plugin runtime, no dynamic code loading, and a stale widget name degrades to
+  the default control instead of blanking the field. The cost is that custom widgets require a build
+  step in the app, which is already how its Vite config works.
+
+## D-060 — Row locks are a sharded Durable Object pool
+
+- **Status:** Accepted · 2026-09-22
+- **Context:** Two people editing one row is a correctness problem: the second save silently wins. D1
+  has no row locks, and "is this row being edited?" is a check-and-set that has to be atomic. Durable
+  Objects give exactly that, but one object per row would be an unbounded number of objects, and a
+  single object would serialise every lock in the project.
+- **Decision:** Locks live in `RowLockDurableObject`, sharded into a fixed pool (16 by default) by a
+  stable hash of `<model>.<id>`. The key includes the model name so equal ids cannot collide. Locks
+  carry an absolute expiry, re-acquiring keeps the token so a page refresh does not lose it, and the
+  object's single alarm is pointed at the earliest expiry rather than one alarm per lock. The binding
+  is opt-in (`locks.binding`), and the app must export the class because a Worker owns its Durable
+  Objects.
+- **Consequences:** A hot row costs one shard, not the service. Locks are advisory and expire, so a
+  closed tab cannot hold a row forever — the trade is that a lock is a signal, not a guarantee, and
+  the admin treats a `409` as information rather than a hard failure.
+
+## D-061 — The guide is Markdown; a hosted site is deferred
+
+- **Status:** Accepted · 2026-09-22
+- **Context:** M7 lists a documentation site. The useful part is the documentation; the site generator
+  is a build dependency and a publishing pipeline, and choosing one now would be a guess about where
+  the project is hosted.
+- **Decision:** Write the guide as plain Markdown under `docs/guide/`, cross-linked, with `SPEC.md` and
+  `DECISIONS.md` staying where they are. No generator, no build step.
+- **Consequences:** The content is reviewable and diffable today, and any generator can consume it
+  later — the pages avoid generator-specific syntax deliberately. Until then there is no search, no
+  versioning and no published URL, which is the honest cost.
+
+## D-062 — A single PDF render is a task, not a Workflow
+
+- **Status:** Accepted · 2026-09-22 · narrows the spec's "Workflow-backed" wording
+- **Context:** The spec puts PDF export on Workflows. A Workflow earns its cost when a job has several
+  steps that must survive restarts and report progress between them. Rendering one page to a PDF is a
+  single step: launch, navigate, print, store.
+- **Decision:** `renderPdf` and `createPdfExporter` live in `@clango/tasks` and are driven by a Queue
+  task, one message per export. The exporter still separates rendering from storing and reports each
+  stage, so moving it behind a Workflow later is a change of driver, not of the code that does the
+  work.
+- **Consequences:** Retries, backoff and the dead-letter queue come from the queue configuration
+  instead of a Workflow definition, and a slow export cannot hold a Workflow instance. Multi-step
+  exports — a whole collection, with a manifest — remain a Workflow-shaped job and should use one.
+  The browser itself cannot run in the test pool, so the renderer takes an injectable launcher and the
+  launching is verified by deployment.
+
+## D-063 — Generators emit `workspace:*` by default
+
+- **Status:** Accepted · 2026-09-22
+- **Context:** `clango init` should produce a project that installs, but the framework packages are
+  `private: true` and unpublished, so a semver range would resolve to nothing.
+- **Decision:** `projectFiles` defaults `frameworkVersion` to `workspace:*` and accepts an override.
+  The generated README says where to run it, and the templates do not reference repository internals
+  beyond the dependency spec.
+- **Consequences:** `clango init` is useful inside the workspace today and needs one flag to be useful
+  outside it once the packages are published. Generated projects are verified by generating one,
+  installing it, typechecking it and running `makemigrations` + `migrate` + `wrangler dev` against it —
+  which is how the missing auth-context type in the generated worker was caught.

@@ -23,6 +23,7 @@
     "@clango/files": "workspace:*",
     "@clango/orm": "workspace:*",
     "@clango/tasks": "workspace:*",
+    "@cloudflare/puppeteer": "^1.4.0",
     "hono": "^4.9.6",
     "zod": "^4.6.5"
   },
