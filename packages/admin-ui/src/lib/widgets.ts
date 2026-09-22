@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 
-import type { AdminFieldMeta } from "@/features/meta/_types";
-import type { FormValue } from "@/features/form/_lib/values";
+import type { AdminFieldMeta } from "../features/meta/_types";
+import type { FormValue } from "../features/form/_lib/values";
 
 /**
  * Custom admin widgets.

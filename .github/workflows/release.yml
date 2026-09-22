@@ -1,0 +1,41 @@
+name: Release
+
+# Tagging is the release: `git tag v0.1.0 && git push --tags`.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          # Writes an .npmrc pointing the @clango scope at GitHub Packages and wires NODE_AUTH_TOKEN.
+          registry-url: "https://npm.pkg.github.com"
+          scope: "@clango"
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build
+
+      # Never publish something that does not pass its own checks.
+      - run: pnpm check
+
+      # `publishConfig` swaps source exports for built output; packages already at this version are
+      # skipped, so a re-run is safe.
+      - run: pnpm release
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

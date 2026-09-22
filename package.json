@@ -8,13 +8,15 @@
     "node": ">=20"
   },
   "scripts": {
+    "build": "pnpm -r --filter './packages/*' build",
+    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test",
     "dev": "pnpm --filter @clango/example-blog dev",
-    "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "eslint .",
+    "release": "pnpm -r --filter './packages/*' publish --access restricted --no-git-checks",
     "test": "pnpm -r --if-present test",
-    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test"
+    "typecheck": "pnpm -r --if-present typecheck"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

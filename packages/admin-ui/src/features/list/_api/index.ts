@@ -1,4 +1,4 @@
-import { api } from "@/lib/api-client";
+import { api } from "../../../lib/api-client";
 
 import type { CascadePreview, ListResult, RelationOption } from "../_types";
 

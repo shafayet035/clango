@@ -4,10 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 
-import { FieldControl } from "@/components/field-control";
-import { createRow, fetchRow, listKeys, updateRow } from "@/features/list/_api";
-import { fetchMeta, metaKeys } from "@/features/meta/_api";
-import { findModel, keyOfModel } from "@/features/models/_lib/model";
+import { FieldControl } from "../../components/field-control";
+import { createRow, fetchRow, listKeys, updateRow } from "../list/_api";
+import { fetchMeta, metaKeys } from "../meta/_api";
+import { findModel, keyOfModel } from "../models/_lib/model";
 import {
   buildCreatePayload,
   buildUpdatePayload,
@@ -15,7 +15,7 @@ import {
   validateRequired,
   valuesFromRow,
   type FormValue,
-} from "@/features/form/_lib/values";
+} from "./_lib/values";
 
 interface FieldIssue {
   readonly path?: readonly (string | number)[];

@@ -1,7 +1,7 @@
 {
   "name": "@clango/cli",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "private": false,
   "type": "module",
   "bin": {
     "clango": "./dist/cli.js"
@@ -14,16 +14,17 @@
     "src"
   ],
   "scripts": {
-    "build": "node scripts/build.mjs",
-    "prepare": "node scripts/build.mjs",
+    "build": "tsc -p tsconfig.build.json && node scripts/build.mjs",
     "cli": "node dist/cli.js",
+    "prepare": "pnpm build",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@clango/core": "workspace:*",
-    "@clango/migrate": "workspace:*"
+    "@clango/core": "workspace:^",
+    "@clango/migrate": "workspace:^",
+    "esbuild": "^0.28.2"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.2.2",
@@ -31,5 +32,28 @@
     "esbuild": "^0.28.2",
     "vitest": "^4.1.11",
     "wrangler": "^4.136.2"
+  },
+  "description": "The clango command: init, startapp, makemigrations, migrate and createsuperuser.",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shafayet035/clango.git",
+    "directory": "packages/cli"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
   }
 }

@@ -7,8 +7,8 @@ import {
   orderMarker,
   parseOrder,
   toggleOrder,
-} from "@/features/list/_lib/format";
-import type { AdminFieldMeta } from "@/features/meta/_types";
+} from "../src/features/list/_lib/format";
+import type { AdminFieldMeta } from "../src/features/meta/_types";
 
 function field(
   overrides: Partial<AdminFieldMeta> & Pick<AdminFieldMeta, "name" | "widget">,

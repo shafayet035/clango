@@ -4,10 +4,9 @@ import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router";
 import { Toaster } from "sonner";
 
-import { ErrorBoundary } from "@/components/error-boundary";
-import { queryClient } from "@/lib/query-client";
-import { router } from "@/router";
-import "@/styles/globals.css";
+import { ErrorBoundary } from "../components/error-boundary";
+import { queryClient } from "./query-client";
+import { router } from "../router";
 
 /** Options accepted by {@link mountAdminUi}. */
 export interface MountOptions {

@@ -1,12 +1,12 @@
-import type { AdminFieldMeta } from "@/features/meta/_types";
+import type { AdminFieldMeta } from "../features/meta/_types";
 import { Input, ListBox, Select, TextArea } from "@heroui/react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
-import { fetchOptions, listKeys } from "@/features/list/_api";
-import { modelKeyOf } from "@/features/models/_lib/model";
-import { widgetByName } from "@/lib/widgets";
-import type { FormValue } from "@/features/form/_lib/values";
+import { fetchOptions, listKeys } from "../features/list/_api";
+import { modelKeyOf } from "../features/models/_lib/model";
+import { widgetByName } from "../lib/widgets";
+import type { FormValue } from "../features/form/_lib/values";
 
 interface FieldControlProps {
   readonly field: AdminFieldMeta;

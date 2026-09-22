@@ -1,4 +1,4 @@
-import { api } from "@/lib/api-client";
+import { api } from "../../../lib/api-client";
 
 import type { AdminMeta } from "../_types";
 

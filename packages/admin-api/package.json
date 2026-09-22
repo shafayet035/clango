@@ -1,34 +1,57 @@
 {
   "name": "@clango/admin-api",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "private": false,
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "files": [
+    "dist",
     "src"
   ],
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "types": "wrangler types"
   },
   "dependencies": {
-    "@clango/api": "workspace:*",
-    "@clango/auth": "workspace:*",
-    "@clango/core": "workspace:*",
-    "@clango/files": "workspace:*",
-    "@clango/orm": "workspace:*",
-    "@clango/tasks": "workspace:*",
+    "@clango/api": "workspace:^",
+    "@clango/auth": "workspace:^",
+    "@clango/core": "workspace:^",
+    "@clango/files": "workspace:^",
+    "@clango/orm": "workspace:^",
+    "@clango/tasks": "workspace:^",
     "drizzle-orm": "^0.45.3",
     "hono": "^4.9.6"
   },
   "devDependencies": {
-    "@clango/migrate": "workspace:*",
+    "@clango/migrate": "workspace:^",
     "@cloudflare/vitest-plugin": "^1.2.2",
+    "@cloudflare/workers-types": "^5.20260922.1",
     "vitest": "^4.1.11",
     "wrangler": "^4.136.2"
-  }
+  },
+  "description": "Admin metadata, CRUD, relation options, cascade previews, audit log and row locks.",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shafayet035/clango.git",
+    "directory": "packages/admin-api"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "sideEffects": false
 }

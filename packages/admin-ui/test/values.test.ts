@@ -9,8 +9,8 @@ import {
   toLocalInput,
   validateRequired,
   valuesFromRow,
-} from "@/features/form/_lib/values";
-import type { AdminFieldMeta } from "@/features/meta/_types";
+} from "../src/features/form/_lib/values";
+import type { AdminFieldMeta } from "../src/features/meta/_types";
 
 function field(
   overrides: Partial<AdminFieldMeta> & Pick<AdminFieldMeta, "name" | "widget">,

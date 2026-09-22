@@ -3,9 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 
-import { deleteRow, fetchCascade, fetchRow, listKeys } from "@/features/list/_api";
-import { fetchMeta, metaKeys } from "@/features/meta/_api";
-import { findModel, keyOfModel } from "@/features/models/_lib/model";
+import { deleteRow, fetchCascade, fetchRow, listKeys } from "../list/_api";
+import { fetchMeta, metaKeys } from "../meta/_api";
+import { findModel, keyOfModel } from "../models/_lib/model";
 
 /** Delete confirmation with a cascade preview of everything else the delete will affect. */
 export default function DeletePage(): React.ReactElement {

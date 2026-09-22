@@ -1,7 +1,12 @@
 import type { AdminMeta, AdminModelMeta } from "@clango/core";
 import { describe, expect, it } from "vitest";
 
-import { editableFields, findModel, keyOfModel, modelKeyOf } from "@/features/models/_lib/model";
+import {
+  editableFields,
+  findModel,
+  keyOfModel,
+  modelKeyOf,
+} from "../src/features/models/_lib/model";
 
 function model(overrides: Partial<AdminModelMeta> & Pick<AdminModelMeta, "name">): AdminModelMeta {
   return {

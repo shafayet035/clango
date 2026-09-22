@@ -2,11 +2,11 @@ import { Skeleton } from "@heroui/react";
 import { useQuery } from "@tanstack/react-query";
 import { Navigate, createBrowserRouter } from "react-router";
 
-import { AppShell } from "@/components/app-shell";
-import DeletePage from "@/features/delete/page";
-import FormPage from "@/features/form/page";
-import ListPage from "@/features/list/page";
-import { fetchMeta, metaKeys } from "@/features/meta/_api";
+import { AppShell } from "./components/app-shell";
+import DeletePage from "./features/delete/page";
+import FormPage from "./features/form/page";
+import ListPage from "./features/list/page";
+import { fetchMeta, metaKeys } from "./features/meta/_api";
 
 /** Sends `/admin` to the first model so the admin never opens on an empty screen. */
 function FirstModelRedirect(): React.ReactElement {

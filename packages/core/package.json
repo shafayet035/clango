@@ -1,15 +1,17 @@
 {
   "name": "@clango/core",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "private": false,
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "files": [
+    "dist",
     "src"
   ],
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "dev": "wrangler dev",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -18,7 +20,28 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.2.2",
+    "@cloudflare/workers-types": "^5.20260922.1",
     "vitest": "^4.1.11",
     "wrangler": "^4.136.2"
-  }
+  },
+  "description": "Model, field and app definitions; the Clango registry.",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shafayet035/clango.git",
+    "directory": "packages/core"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "sideEffects": false
 }

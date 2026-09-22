@@ -1,6 +1,7 @@
 node_modules/
 .wrangler/
 dist/
+lib/
 coverage/
 pnpm-lock.yaml
 worker-configuration.d.ts

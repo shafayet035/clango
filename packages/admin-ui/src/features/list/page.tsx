@@ -5,14 +5,14 @@ import { useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 
-import { FieldControl } from "@/components/field-control";
-import { fetchList, listKeys, runAction } from "@/features/list/_api";
-import { formatCell, listQueryString, orderMarker, toggleOrder } from "@/features/list/_lib/format";
-import type { ListResult } from "@/features/list/_types";
-import { fetchMeta, metaKeys } from "@/features/meta/_api";
-import { findModel, keyOfModel } from "@/features/models/_lib/model";
-import type { FormValue } from "@/features/form/_lib/values";
-import { useRelationLabels } from "@/features/list/_lib/use-relation-labels";
+import { FieldControl } from "../../components/field-control";
+import { fetchList, listKeys, runAction } from "./_api";
+import { formatCell, listQueryString, orderMarker, toggleOrder } from "./_lib/format";
+import type { ListResult } from "./_types";
+import { fetchMeta, metaKeys } from "../meta/_api";
+import { findModel, keyOfModel } from "../models/_lib/model";
+import type { FormValue } from "../form/_lib/values";
+import { useRelationLabels } from "./_lib/use-relation-labels";
 
 const PAGE_SIZE = 25;
 

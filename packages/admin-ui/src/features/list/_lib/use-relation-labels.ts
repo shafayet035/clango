@@ -1,9 +1,9 @@
-import type { AdminModelMeta } from "@/features/meta/_types";
+import type { AdminModelMeta } from "../../meta/_types";
 import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-import { fetchOptions, listKeys } from "@/features/list/_api";
-import { modelKeyOf, relationFields } from "@/features/models/_lib/model";
+import { fetchOptions, listKeys } from "../_api";
+import { modelKeyOf, relationFields } from "../../models/_lib/model";
 
 /**
  * Resolves relation columns on the current page to human labels.

@@ -2,8 +2,8 @@ import { Alert } from "@heroui/react";
 import { useQuery } from "@tanstack/react-query";
 import { NavLink, Outlet } from "react-router";
 
-import { ApiError } from "@/lib/api-client";
-import { fetchMeta, metaKeys } from "@/features/meta/_api";
+import { ApiError } from "../lib/api-client";
+import { fetchMeta, metaKeys } from "../features/meta/_api";
 
 /** Chrome for every admin screen: sidebar navigation plus the routed page. */
 export function AppShell(): React.ReactElement {

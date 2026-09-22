@@ -7,6 +7,8 @@ export default tseslint.config(
     ignores: [
       "**/node_modules/**",
       "**/dist/**",
+      // @clango/admin-ui builds its library here; `dist` holds the SPA.
+      "packages/admin-ui/lib/**",
       "**/.wrangler/**",
       "**/coverage/**",
       "**/worker-configuration.d.ts",

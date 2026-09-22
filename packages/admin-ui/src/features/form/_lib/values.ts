@@ -1,4 +1,4 @@
-import type { AdminFieldMeta } from "@/features/meta/_types";
+import type { AdminFieldMeta } from "../../meta/_types";
 
 /**
  * Conversions between API values and HTML form values. Pure and DOM-free so they can be unit tested.

@@ -1,4 +1,4 @@
-import type { AdminFieldMeta } from "@/features/meta/_types";
+import type { AdminFieldMeta } from "../../meta/_types";
 
 /** One entry of a list `order` query parameter. */
 export interface OrderEntry {
