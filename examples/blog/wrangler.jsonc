@@ -41,5 +41,13 @@
       "database_id": "00000000-0000-0000-0000-000000000000",
       "migrations_dir": "migrations/DB_MAIN",
     },
+    {
+      // A tenant database. Bindings are static, so each tenant's databases are declared here; this
+      // is the ceiling that makes the binding-pool approach the practical one (D-055).
+      "binding": "DB_MAIN_ACME",
+      "database_name": "clango-blog-acme",
+      "database_id": "00000000-0000-0000-0000-000000000010",
+      "migrations_dir": "migrations/DB_MAIN",
+    },
   ],
 }

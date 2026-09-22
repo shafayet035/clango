@@ -7,10 +7,16 @@ import {
   type ApiOp,
   type ClangoConfig,
 } from "@clango/core";
-import { buildSchema, createD1Router, type DatabaseRouter, type DatabaseSchema } from "@clango/orm";
+import {
+  buildSchema,
+  createD1Router,
+  drizzleOverSession,
+  tenantFromRequest,
+  type DatabaseRouter,
+  type DatabaseSchema,
+} from "@clango/orm";
 import { eq, getTableColumns } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
-import { drizzle } from "drizzle-orm/d1";
 import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { Hono, type Env } from "hono";
 
@@ -45,7 +51,7 @@ function registerModel<TBindings extends object, TVariables extends object>(
   model: AnyModel,
   table: SQLiteTable,
   ops: readonly ApiOp[],
-  databaseFor: (env: object) => DrizzleD1Database,
+  databaseFor: (context: { env: object; req: { raw: Request } }) => DrizzleD1Database,
 ): void {
   const base = apiPathFor(model);
   const validation = buildValidation(model);
@@ -55,7 +61,7 @@ function registerModel<TBindings extends object, TVariables extends object>(
   if (ops.includes("list")) {
     app.get(base, async (c) => {
       const params = new URL(c.req.url).searchParams;
-      const result = await listRows({ model, table, db: databaseFor(c.env), params });
+      const result = await listRows({ model, table, db: databaseFor(c), params });
       return c.json(result);
     });
   }
@@ -74,11 +80,7 @@ function registerModel<TBindings extends object, TVariables extends object>(
         updatedAt: now,
       };
 
-      const rows: unknown[] = await databaseFor(c.env)
-        .insert(table)
-        .values(record)
-        .returning()
-        .all();
+      const rows: unknown[] = await databaseFor(c).insert(table).values(record).returning().all();
       const row = rows[0];
       return c.json({ data: row }, 201, {
         location: `${base}/${String((row as Record<string, unknown> | undefined)?.["id"] ?? "")}`,
@@ -89,7 +91,7 @@ function registerModel<TBindings extends object, TVariables extends object>(
   if (ops.includes("retrieve")) {
     app.get(`${base}/:id`, async (c) => {
       const id = c.req.param("id");
-      const rows: unknown[] = await databaseFor(c.env)
+      const rows: unknown[] = await databaseFor(c)
         .select()
         .from(table)
         .where(eq(idColumn, id))
@@ -116,7 +118,7 @@ function registerModel<TBindings extends object, TVariables extends object>(
         throw badRequest("Provide at least one field to update.");
       }
 
-      const rows: unknown[] = await databaseFor(c.env)
+      const rows: unknown[] = await databaseFor(c)
         .update(table)
         .set({ ...provided, updatedAt: new Date() })
         .where(eq(idColumn, id))
@@ -131,7 +133,7 @@ function registerModel<TBindings extends object, TVariables extends object>(
   if (ops.includes("delete")) {
     app.delete(`${base}/:id`, async (c) => {
       const id = c.req.param("id");
-      const removed: unknown[] = await databaseFor(c.env)
+      const removed: unknown[] = await databaseFor(c)
         .delete(table)
         .where(eq(idColumn, id))
         .returning({ id: idColumn })
@@ -156,23 +158,39 @@ export function createApiApp<
   const app = new Hono<{ Bindings: TBindings; Variables: TVariables }>();
   const registry = collectRegistry(config);
   const schema: DatabaseSchema = buildSchema(registry);
-  const routers = new WeakMap<object, DatabaseRouter>();
+  const routers = new WeakMap<object, Map<string, DatabaseRouter>>();
+  // One client per request, so every query shares a D1 session and therefore sees this request's own
+  // writes even when reads are served by a replica.
+  const clients = new WeakMap<Request, DrizzleD1Database>();
 
-  function routerFor(env: object): DatabaseRouter {
-    let router = routers.get(env);
-    if (router === undefined) {
-      router = createD1Router(config, env);
-      routers.set(env, router);
+  function clientFor(request: Request, env: object, database: string): DrizzleD1Database {
+    const existing = clients.get(request);
+    if (existing !== undefined) return existing;
+
+    const tenant = tenantFromRequest(config, request) ?? undefined;
+    const key = tenant ?? "";
+    let routersForEnv = routers.get(env);
+    if (routersForEnv === undefined) {
+      routersForEnv = new Map();
+      routers.set(env, routersForEnv);
     }
-    return router;
+    let router = routersForEnv.get(key);
+    if (router === undefined) {
+      router = createD1Router(config, env, tenant === undefined ? {} : { tenant });
+      routersForEnv.set(key, router);
+    }
+
+    const client = drizzleOverSession(router.database(database).session());
+    clients.set(request, client);
+    return client;
   }
 
   for (const entry of registry.models) {
     const ops = apiOps(entry.model);
     if (ops.length === 0) continue;
     const table = schema.table(entry.model.name);
-    registerModel(app, entry.model, table, ops, (env) =>
-      drizzle(routerFor(env).database(entry.database).db),
+    registerModel(app, entry.model, table, ops, (c) =>
+      clientFor(c.req.raw, c.env as object, entry.database),
     );
   }
 

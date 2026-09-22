@@ -21,4 +21,7 @@ export default defineConfig({
   },
   tasks: { binding: "TASKS", queue: "clango-blog-tasks" },
   cache: { binding: "CACHE", prefix: "blog:" },
+  // Database-per-tenant: a request carrying `x-clango-tenant: acme` is served from DB_MAIN_ACME.
+  // Requests without the header keep using DB_MAIN, so tenancy is inert until a tenant is sent.
+  tenants: { enabled: true, database: "DB_MAIN" },
 });

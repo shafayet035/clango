@@ -22,6 +22,7 @@ describe("parseArgs", () => {
       target: "default",
       databases: [],
       migrationsDir: DEFAULT_MIGRATIONS_DIR,
+      allTenants: false,
     });
   });
 
@@ -48,6 +49,11 @@ describe("parseArgs", () => {
   it("collects repeated --database flags", () => {
     const parsed = parseArgs(["migrate", "--database", "DB_MAIN", "--database", "DB_AUDIT"]);
     expect(parsed.options.databases).toEqual(["DB_MAIN", "DB_AUDIT"]);
+  });
+
+  it("parses --all-tenants for migrate only", () => {
+    expect(parseArgs(["migrate", "--all-tenants"]).options.allTenants).toBe(true);
+    expect(() => parseArgs(["makemigrations", "--all-tenants"])).toThrow(CliUsageError);
   });
 
   it("parses --allow-destructive", () => {

@@ -412,6 +412,64 @@
       ]
     },
     {
+      "name": "clango_tenant",
+      "kind": "model",
+      "owner": "clango.Tenant",
+      "columns": [
+        {
+          "name": "id",
+          "property": "id",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "created_at",
+          "property": "createdAt",
+          "type": "INTEGER",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "expression",
+            "sql": "(unixepoch() * 1000)"
+          }
+        },
+        {
+          "name": "updated_at",
+          "property": "updatedAt",
+          "type": "INTEGER",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "expression",
+            "sql": "(unixepoch() * 1000)"
+          }
+        },
+        {
+          "name": "slug",
+          "property": "slug",
+          "type": "TEXT",
+          "notNull": true
+        },
+        {
+          "name": "name",
+          "property": "name",
+          "type": "TEXT",
+          "notNull": false
+        },
+        {
+          "name": "suspended",
+          "property": "suspended",
+          "type": "INTEGER",
+          "notNull": true,
+          "defaultValue": {
+            "kind": "literal",
+            "sql": "0"
+          }
+        }
+      ],
+      "primaryKey": ["id"],
+      "checks": [],
+      "foreignKeys": []
+    },
+    {
       "name": "clango_user",
       "kind": "model",
       "owner": "clango.User",
@@ -691,6 +749,12 @@
       "name": "uniq_clango_group_name",
       "table": "clango_group",
       "columns": ["name"],
+      "unique": true
+    },
+    {
+      "name": "uniq_clango_tenant_slug",
+      "table": "clango_tenant",
+      "columns": ["slug"],
       "unique": true
     },
     {

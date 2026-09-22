@@ -20,4 +20,12 @@ export { main, type CliIo } from "./main";
 export { runMakemigrations, SNAPSHOT_FILE, type MakemigrationsResult } from "./makemigrations";
 export { runMigrate, type MigrateResult } from "./migrate";
 export { formatMigrationNumber, parseMigrationNumber, slugify } from "./slug";
+export {
+  activeTenants,
+  buildTenantListSql,
+  parseTenantRows,
+  planTenantMigrations,
+  type TenantMigrationStep,
+  type TenantRow,
+} from "./tenants";
 export { VERSION } from "./version";

@@ -9,5 +9,20 @@
       "database_name": "clango-orm-test",
       "database_id": "00000000-0000-0000-0000-000000000000",
     },
+    {
+      "binding": "DB_STATS",
+      "database_name": "clango-orm-stats",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+    },
+    {
+      "binding": "DB_MAIN_ACME",
+      "database_name": "clango-orm-acme",
+      "database_id": "00000000-0000-0000-0000-000000000002",
+    },
+    {
+      "binding": "DB_STATS_ACME",
+      "database_name": "clango-orm-stats-acme",
+      "database_id": "00000000-0000-0000-0000-000000000003",
+    },
   ],
 }

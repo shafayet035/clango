@@ -35,7 +35,9 @@ export {
   collectRegistry,
   defineConfig,
   findModel,
+  DEFAULT_TENANT_HEADER,
   SYSTEM_APP_LABEL,
+  tenantBindingFor,
   type AdminConfig,
   type AuthConfig,
   type CacheConfig,
@@ -107,7 +109,10 @@ export {
   CLANGO_GROUP_PERMISSION_MODEL,
   CLANGO_USER_GROUP_MODEL,
   CLANGO_USER_MODEL,
+  CLANGO_TENANT_MODEL,
   CLANGO_USER_PERMISSION_MODEL,
+  CONTROL_MODELS,
+  ClangoTenant,
   type AdminLogAction,
 } from "./system";
 export { isUlid, newUlid } from "./ulid";

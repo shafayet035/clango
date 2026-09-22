@@ -24,6 +24,8 @@ export interface CliOptions {
   readonly migrationsDir: string;
   /** Email of the account to appoint, for `createsuperuser`. */
   readonly email?: string;
+  /** Applies migrations to every active tenant, not just the project's own database. */
+  readonly allTenants: boolean;
 }
 
 /** The result of parsing `process.argv.slice(2)`. */
@@ -73,12 +75,14 @@ export function parseArgs(argv: readonly string[]): ParsedCommand {
     name?: string;
     migrationsDir: string;
     email?: string;
+    allTenants: boolean;
   } = {
     config: DEFAULT_CONFIG_PATH,
     allowDestructive: false,
     target: "default",
     databases: [],
     migrationsDir: DEFAULT_MIGRATIONS_DIR,
+    allTenants: false,
   };
 
   let command: CliCommand | undefined;
@@ -123,6 +127,9 @@ export function parseArgs(argv: readonly string[]): ParsedCommand {
       case "--allow-destructive":
         options.allowDestructive = true;
         break;
+      case "--all-tenants":
+        options.allTenants = true;
+        break;
       case "--local":
         options.target = "local";
         break;
@@ -159,6 +166,10 @@ export function parseArgs(argv: readonly string[]): ParsedCommand {
     throw new CliUsageError("clango createsuperuser requires --email <address>.");
   }
 
+  if (options.allTenants && command !== "migrate") {
+    throw new CliUsageError('"--all-tenants" is only valid for "clango migrate".');
+  }
+
   return { command, options };
 }
 
@@ -179,6 +190,7 @@ export function renderHelp(version: string): string {
     "  --name <slug>            Override the generated migration name",
     "  --email <address>        createsuperuser only: who to appoint",
     "  --allow-destructive      Required to drop columns or tables",
+    "  --all-tenants            migrate only: apply to every active tenant",
     "  --local | --remote       migrate only: apply to the local or remote database",
     "  -h, --help               Show this message",
     "  -v, --version            Show the version",

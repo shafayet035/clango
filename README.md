@@ -3,8 +3,8 @@
 A Django-style framework for Cloudflare Workers. Define models in apps and Clango generates the
 database schema, migrations, a REST API and a full admin panel.
 
-> **Status:** M0–M5 complete: scaffold, models + migrations, generated REST API, admin,
-> auth + permissions, and files/tasks/cache. See `docs/SPEC.md`.
+> **Status:** M0–M6 complete: scaffold, models + migrations, generated REST API, admin,
+> auth + permissions, files/tasks/cache, and scale features. See `docs/SPEC.md`.
 
 ## What works today
 
@@ -125,3 +125,30 @@ docs/         SPEC.md — the spec; DECISIONS.md — the ADR log
 | `pnpm dev`       | `wrangler dev` for `examples/blog` |
 
 Read `CLAUDE.md` for conventions and `docs/SPEC.md` for the authoritative spec.
+
+## Scaling out
+
+D1 databases are capped at 10 GB and are single-threaded, so Clango treats "many small databases" as
+the normal shape rather than the exception.
+
+```ts
+export default defineConfig({
+  apps: [blog, analytics], // blog → DB_MAIN, analytics → DB_STATS
+  databases: {
+    DB_MAIN: { binding: "DB_MAIN" },
+    DB_STATS: { binding: "DB_STATS" },
+  },
+  tenants: { enabled: true, database: "DB_MAIN" },
+});
+```
+
+- **Relations stay inside a database.** A `foreignKey` or `manyToMany` that crosses databases is
+  rejected when the registry is built, because D1 can neither join nor enforce a constraint across
+  them.
+- **Database per tenant.** A request carrying `x-clango-tenant: acme` is served from that tenant's
+  databases, resolved as `<DATABASE>_<SLUG>` from bindings declared in `wrangler.jsonc`
+  (`DB_MAIN_ACME`). An unbound tenant fails loudly instead of reading the shared database.
+- **`clango migrate --all-tenants`** reads the registry, skips suspended tenants, and applies the
+  shared migrations to every tenant database.
+- **Reads use a per-request D1 session**, so read-after-write is consistent and enabling read
+  replication on a database needs no code change.

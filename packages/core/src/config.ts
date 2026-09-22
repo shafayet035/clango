@@ -2,7 +2,7 @@ import type { AuthAdapter } from "./auth";
 import { defineApp, isApp, type App } from "./app";
 import { ModelDefinitionError } from "./errors";
 import type { AnyModel } from "./model";
-import { AUTH_MODELS, AdminLog } from "./system";
+import { AUTH_MODELS, AdminLog, CONTROL_MODELS } from "./system";
 
 /** A D1 database a project can bind models to. */
 export interface DatabaseConfig {
@@ -61,6 +61,28 @@ export interface CacheConfig {
   readonly prefix?: string;
 }
 
+/**
+ * Database-per-tenant mode.
+ *
+ * Each tenant is served from its own D1 database, and the registry table in the control database maps
+ * a slug to a Worker binding. The binding-pool approach is deliberate: Workers bindings are static
+ * and a script can hold roughly 5,000 of them, so a resolver may choose among declared bindings but
+ * cannot conjure one (D-012, D-055).
+ */
+export interface TenantsConfig {
+  /** Tenancy is inert unless this is `true`. */
+  readonly enabled?: boolean;
+  /** Database that holds the tenant registry. Needed when several are declared. */
+  readonly database?: string;
+  /** Request header carrying the tenant slug. Defaults to `x-clango-tenant`. */
+  readonly header?: string;
+  /**
+   * Builds the binding name for a tenant and logical database.
+   * Defaults to `<DATABASE>_<SLUG>` in upper snake case, for example `DB_MAIN_ACME`.
+   */
+  readonly bindingTemplate?: string;
+}
+
 /** The shape of `clango.config.ts`. */
 export interface ClangoConfig<TApps extends readonly App[] = readonly App[]> {
   apps: TApps;
@@ -76,6 +98,8 @@ export interface ClangoConfig<TApps extends readonly App[] = readonly App[]> {
   cache?: CacheConfig;
   /** Enables background tasks: admin actions and file cleanup are enqueued here. */
   tasks?: TasksConfig;
+  /** Enables database-per-tenant routing. */
+  tenants?: TenantsConfig;
 }
 
 /**
@@ -197,6 +221,24 @@ export function defineConfig<const TApps extends readonly App[]>(
   ) {
     throw new ModelDefinitionError("defineConfig `tasks.binding` must be a non-empty string.");
   }
+  if (config.tenants !== undefined) {
+    if (typeof config.tenants !== "object" || config.tenants === null) {
+      throw new ModelDefinitionError("defineConfig `tenants` must be an object.");
+    }
+    if (config.tenants.enabled !== undefined && typeof config.tenants.enabled !== "boolean") {
+      throw new ModelDefinitionError("defineConfig `tenants.enabled` must be a boolean.");
+    }
+    if (config.tenants.bindingTemplate !== undefined) {
+      if (
+        !config.tenants.bindingTemplate.includes("{database}") ||
+        !config.tenants.bindingTemplate.includes("{tenant}")
+      ) {
+        throw new ModelDefinitionError(
+          "defineConfig `tenants.bindingTemplate` must contain both `{database}` and `{tenant}`.",
+        );
+      }
+    }
+  }
   if (config.databases !== undefined) {
     if (typeof config.databases !== "object" || config.databases === null) {
       throw new ModelDefinitionError("defineConfig `databases` must be an object.");
@@ -238,7 +280,34 @@ export function collectRegistry(config: ClangoConfig): Registry {
     }
   }
 
+  assertRelationsStayInOneDatabase(models);
   return { models, byName };
+}
+
+/**
+ * Rejects a relation whose target lives in another database.
+ *
+ * D1 databases cannot join across each other, and a foreign key constraint cannot span them either,
+ * so the mistake has to be caught at definition time rather than as a missing row at runtime. The
+ * error names both databases and the field, because the fix is a routing change, not a field change.
+ */
+function assertRelationsStayInOneDatabase(models: readonly RegisteredModel[]): void {
+  const byModelName = new Map(models.map((entry) => [entry.model.name, entry]));
+  for (const entry of models) {
+    for (const [property, field] of Object.entries(entry.model.fields)) {
+      if (field.kind !== "foreignKey" && field.kind !== "manyToMany") continue;
+      const target = field.ref?.();
+      if (target === undefined) continue;
+      const targetEntry = byModelName.get(target.name);
+      if (targetEntry === undefined || targetEntry.database === entry.database) continue;
+      throw new ModelDefinitionError(
+        `Model "${entry.model.name}" field "${property}" points at "${target.name}", which lives in ` +
+          `database "${targetEntry.database}" while "${entry.model.name}" lives in "${entry.database}". ` +
+          "D1 cannot join or enforce a foreign key across databases; route both models to the same " +
+          "database, or drop the relation and store the id yourself.",
+      );
+    }
+  }
 }
 
 /** Convenience wrapper returning only the models in the project. */
@@ -256,6 +325,35 @@ export function collectDatabases(config: ClangoConfig): readonly string[] {
   const names = new Set(collectRegistry(config).models.map((entry) => entry.database));
   return [...names].sort();
 }
+
+/**
+ * Resolves the Worker binding that serves a logical database for a tenant.
+ *
+ * Bindings are static, so the tenant's databases must already be declared in `wrangler.jsonc`. The
+ * default shape is `<DATABASE>_<SLUG>` in upper snake case (`DB_MAIN_ACME`); `bindingTemplate`
+ * overrides it with `{database}` and `{tenant}` placeholders.
+ */
+export function tenantBindingFor(config: ClangoConfig, database: string, tenant: string): string {
+  const template = config.tenants?.bindingTemplate;
+  if (template !== undefined) {
+    return template
+      .replaceAll("{database}", bindingSegment(database))
+      .replaceAll("{tenant}", bindingSegment(tenant))
+      .toUpperCase();
+  }
+  return `${bindingSegment(database)}_${bindingSegment(tenant)}`;
+}
+
+/** Turns arbitrary text into an uppercase binding-safe segment. */
+function bindingSegment(value: string): string {
+  return value
+    .replace(/[^A-Za-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toUpperCase();
+}
+
+/** The header a tenant slug is read from when no other strategy is configured. */
+export const DEFAULT_TENANT_HEADER = "x-clango-tenant";
 
 function resolveDatabase(model: AnyModel, app: App, databaseNames: readonly string[]): string {
   const name =
@@ -283,10 +381,11 @@ function systemApps(config: ClangoConfig): readonly App[] {
   const models = [
     ...(config.admin?.enabled === true ? [AdminLog] : []),
     ...(config.auth?.enabled === true ? AUTH_MODELS : []),
+    ...(config.tenants?.enabled === true ? CONTROL_MODELS : []),
   ];
   if (models.length === 0) return [];
 
-  const database = config.auth?.enabled === true ? config.auth.database : config.admin?.database;
+  const database = config.auth?.database ?? config.admin?.database ?? config.tenants?.database;
   return [
     defineApp({
       name: SYSTEM_APP_LABEL,

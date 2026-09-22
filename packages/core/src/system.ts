@@ -107,3 +107,28 @@ export const AUTH_MODELS = [
   ClangoGroupPermission,
   ClangoUserPermission,
 ] as const;
+
+/** Qualified name of the tenant registry table. */
+export const CLANGO_TENANT_MODEL = "clango.Tenant";
+
+/**
+ * A tenant.
+ *
+ * The registry lives in the project's control database and holds only facts an operator decides:
+ * which tenants exist and whether they are suspended. Where their data lives is *derived* — the
+ * binding for a tenant and a logical database comes from `tenants.bindingTemplate` (or the default
+ * `<DATABASE>_<SLUG>`), because Workers bindings are static and must already be declared in
+ * `wrangler.jsonc` (D-012, D-055).
+ */
+export const ClangoTenant = defineModel(CLANGO_TENANT_MODEL, {
+  fields: {
+    slug: fields.string({ max: 100, unique: true }),
+    name: fields.string({ max: 200, optional: true }),
+    /** Suspended tenants are refused by the resolver without deleting anything. */
+    suspended: fields.boolean({ default: false }),
+  },
+  meta: { labelField: "slug", verboseName: "tenant", verboseNamePlural: "tenants" },
+});
+
+/** Every framework model that belongs to the control plane rather than tenant data. */
+export const CONTROL_MODELS = [ClangoTenant] as const;

@@ -5,7 +5,21 @@ import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 import { buildTable } from "./schema";
 import type { DatabaseDriver } from "./router";
 
-export { createD1Router, type DatabaseDriver, type DatabaseRouter } from "./router";
+export {
+  bindingForTenant,
+  createD1Router,
+  createRouter,
+  d1DriverFactory,
+  isDatabaseRouter,
+  modelsOf,
+  tenantFromRequest,
+  type DatabaseDriver,
+  type DatabaseRouter,
+  type DriverDialect,
+  type DriverFactory,
+  type RouterOptions,
+} from "./router";
+export { clientForDriver, drizzleOverSession, type DrizzleD1Database } from "./client";
 export { buildTable, quoteIdentifier, TIMESTAMP_DEFAULT } from "./schema";
 
 /** Drizzle tables for every model in a project, indexed by model name and by table name. */

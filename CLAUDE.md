@@ -8,8 +8,8 @@ Orientation for this repo. Read this first, then `docs/SPEC.md`.
 schema, migrations, a REST API and a generic admin panel. `docs/SPEC.md` is the authoritative spec;
 `docs/DECISIONS.md` records every non-obvious choice (ADR style, append-only).
 
-**Status:** M0–M5 complete (scaffold, models + migrations, REST API, admin, auth + permissions,
-files/tasks/cache). Next: M6 (scale features).
+**Status:** M0–M6 complete (scaffold, models + migrations, REST API, admin, auth + permissions,
+files/tasks/cache, scale features). Next: M7 (polish).
 
 ## Non-negotiables
 
@@ -126,6 +126,15 @@ See `docs/DECISIONS.md` for the reasoning. Short version:
   it is not — never leave a project leaking objects because it has no queue (D-050).
 - A cron expression must appear in **both** `defineSchedule` and `wrangler.jsonc`'s `triggers.crons`
   (D-052).
+- A relation whose target lives in another database is rejected at definition time — D1 cannot join
+  or enforce a foreign key across databases (D-055).
+- Tenancy is a **binding pool**: every tenant database must be declared in `wrangler.jsonc`, and the
+  binding is derived as `<DATABASE>_<SLUG>` unless `tenants.bindingTemplate` says otherwise. A missing
+  binding fails at router construction naming it, never falling back to the shared database.
+- Reads and writes in one request share a D1 session, so read-after-write is consistent and enabling
+  read replication needs no code change (D-057).
+- **Rebuild the CLI after changing the framework**: `pnpm --filter @clango/cli build`. The bundle
+  contains core and migrate, so a stale one reports "No changes detected" (D-058).
 - Raw `sql` fragments bypass Drizzle's column mapping: convert values with `toDriverValue` before
   binding a `Date` or `boolean`, or D1 rejects them with `D1_TYPE_ERROR` (D-030).
 - Hono does not carry a sub-app's `notFound` across `route()`; `mountApi` installs the JSON handlers

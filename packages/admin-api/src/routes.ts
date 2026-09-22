@@ -35,12 +35,14 @@ import { createEnqueuer, type Enqueuer } from "@clango/tasks";
 import {
   buildSchema,
   createD1Router,
+  drizzleOverSession,
   quoteIdentifier,
+  tenantFromRequest,
   type DatabaseRouter,
   type DatabaseSchema,
 } from "@clango/orm";
 import { eq, getTableColumns } from "drizzle-orm";
-import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
+import type { DrizzleD1Database } from "drizzle-orm/d1";
 import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { Hono } from "hono";
 
@@ -154,11 +156,17 @@ async function selectOptions(
   return toOptions(rows.results);
 }
 
+/** The parts of a Hono context the admin needs, so handlers stay testable. */
+interface HonoContext {
+  readonly env: object;
+  readonly req: { readonly raw: Request };
+}
+
 interface AdminContext<TBindings extends object> {
   readonly app: Hono<{ Bindings: TBindings; Variables: ClangoAuthVariables }>;
   readonly registry: Registry;
   readonly logTable: SQLiteTable;
-  readonly databaseFor: (env: object, database: string) => DrizzleD1Database;
+  readonly databaseFor: (context: HonoContext, database: string) => DrizzleD1Database;
   readonly bindingFor: (env: object, database: string) => D1Database;
   readonly authEnabled: boolean;
   /** Present when R2 file storage is configured. */
@@ -200,7 +208,7 @@ function registerModelRoutes<TBindings extends object>(
   const validation = buildValidation(model);
   const columns = getTableColumns(table) as unknown as Record<string, SQLiteColumn>;
   const idColumn = columns["id"] as SQLiteColumn;
-  const db = (env: object) => databaseFor(env, entry.database);
+  const db = (c: HonoContext) => databaseFor(c, entry.database);
   const binding = (env: object) => bindingFor(env, entry.database);
 
   /** Applies the admin's configured ordering when the client does not ask for one. */
@@ -218,7 +226,7 @@ function registerModelRoutes<TBindings extends object>(
     const result = await listRows({
       model,
       table,
-      db: db(c.env),
+      db: db(c),
       params: listParams(c.req.raw),
     });
     return c.json(result);
@@ -280,7 +288,7 @@ function registerModelRoutes<TBindings extends object>(
     const actionContext: AdminActionContext = {
       model,
       userId: userId(user),
-      db: db(c.env),
+      db: db(c),
       // Present only when a Queues producer is bound, so a short action can run inline and a long
       // one can hand a query descriptor to a consumer instead of listing ids (D-011).
       ...(enqueuerFor === undefined ? {} : { enqueue: enqueuerFor(c.env) }),
@@ -359,7 +367,7 @@ function registerModelRoutes<TBindings extends object>(
       now,
     );
 
-    const client = db(c.env);
+    const client = db(c);
     const results = (await client.batch([
       client.insert(table).values(record).returning(),
       client.insert(logTable).values(log),
@@ -390,9 +398,7 @@ function registerModelRoutes<TBindings extends object>(
 
   app.get(`${base}/:id`, async (c) => {
     const id = c.req.param("id");
-    const rows = asRecords(
-      await db(c.env).select().from(table).where(eq(idColumn, id)).limit(1).all(),
-    );
+    const rows = asRecords(await db(c).select().from(table).where(eq(idColumn, id)).limit(1).all());
     const row = rows[0];
     if (row === undefined) throw notFound(model.name, id);
     return c.json({ data: row });
@@ -413,7 +419,7 @@ function registerModelRoutes<TBindings extends object>(
       throw badRequest("Provide at least one field to update.");
 
     const existing = asRecords(
-      await db(c.env).select().from(table).where(eq(idColumn, id)).limit(1).all(),
+      await db(c).select().from(table).where(eq(idColumn, id)).limit(1).all(),
     );
     const before = existing[0];
     if (before === undefined) throw notFound(model.name, id);
@@ -426,7 +432,7 @@ function registerModelRoutes<TBindings extends object>(
       now,
     );
 
-    const client = db(c.env);
+    const client = db(c);
     const results = (await client.batch([
       client.update(table).set(values).where(eq(idColumn, id)).returning(),
       client.insert(logTable).values(log),
@@ -447,7 +453,7 @@ function registerModelRoutes<TBindings extends object>(
     const user = authorize(c, "delete");
     const id = c.req.param("id");
     const existing = asRecords(
-      await db(c.env).select().from(table).where(eq(idColumn, id)).limit(1).all(),
+      await db(c).select().from(table).where(eq(idColumn, id)).limit(1).all(),
     );
     const before = existing[0];
     if (before === undefined) throw notFound(model.name, id);
@@ -457,7 +463,7 @@ function registerModelRoutes<TBindings extends object>(
       { action: "delete", modelName: model.name, objectId: id, userId: userId(user), diff: before },
       now,
     );
-    const client = db(c.env);
+    const client = db(c);
     const results = (await client.batch([
       client.delete(table).where(eq(idColumn, id)).returning({ id: idColumn }),
       client.insert(logTable).values(log),
@@ -481,7 +487,6 @@ export function createAdminApp<TBindings extends object = object>(
   const app = new Hono<{ Bindings: TBindings; Variables: ClangoAuthVariables }>();
   const registry = collectRegistry(config);
   const schema: DatabaseSchema = buildSchema(registry);
-  const routers = new WeakMap<object, DatabaseRouter>();
   const authEnabled = config.auth?.enabled === true;
   const authorization = new Authorization({ registry, schema });
 
@@ -502,13 +507,35 @@ export function createAdminApp<TBindings extends object = object>(
   /** Framework tables (audit log, authorization) all live in one database. */
   const systemDatabase = logEntry.database;
 
-  function routerFor(env: object): DatabaseRouter {
-    let router = routers.get(env);
+  const routersByEnv = new WeakMap<object, Map<string, DatabaseRouter>>();
+  // One client per request, so every query shares a D1 session: reads then see this request's own
+  // writes, and once read replication is enabled they are served by the nearest replica.
+  const clients = new WeakMap<Request, DrizzleD1Database>();
+
+  function routerFor(env: object, request?: Request): DatabaseRouter {
+    const tenant = request === undefined ? null : tenantFromRequest(config, request);
+    let byTenant = routersByEnv.get(env);
+    if (byTenant === undefined) {
+      byTenant = new Map();
+      routersByEnv.set(env, byTenant);
+    }
+    const key = tenant ?? "";
+    let router = byTenant.get(key);
     if (router === undefined) {
-      router = createD1Router(config, env);
-      routers.set(env, router);
+      router = createD1Router(config, env, tenant === null ? {} : { tenant });
+      byTenant.set(key, router);
     }
     return router;
+  }
+
+  function clientFor(context: HonoContext, database: string): DrizzleD1Database {
+    const existing = clients.get(context.req.raw);
+    if (existing !== undefined) return existing;
+    const client = drizzleOverSession(
+      routerFor(context.env, context.req.raw).database(database).session(),
+    );
+    clients.set(context.req.raw, client);
+    return client;
   }
 
   const filesConfig = config.files;
@@ -537,7 +564,7 @@ export function createAdminApp<TBindings extends object = object>(
     app,
     registry,
     logTable: schema.table(ADMIN_LOG_MODEL_NAME),
-    databaseFor: (env, database) => drizzle(routerFor(env).database(database).db),
+    databaseFor: (context, database) => clientFor(context, database),
     bindingFor: (env, database) => routerFor(env).database(database).db,
     authEnabled,
     ...(storageFor === undefined ? {} : { storageFor }),
@@ -552,7 +579,10 @@ export function createAdminApp<TBindings extends object = object>(
     const authorizeRequest = clangoAuth<TBindings>({
       config,
       authorization,
-      databaseFor: (env: object) => drizzle(routerFor(env).database(systemDatabase).db),
+      // The framework tables live in the control database, which is not tenant-scoped, so this
+      // deliberately resolves the untagged router rather than the request's tenant one.
+      databaseFor: (env: object) =>
+        drizzleOverSession(routerFor(env).database(systemDatabase).session()),
     });
     app.use("/admin/api/*", authorizeRequest);
     app.use(`${downloadPath}/*`, authorizeRequest);

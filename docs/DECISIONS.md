@@ -768,3 +768,79 @@ controller,service,schema}.ts`. That structure pays off when each feature has ha
 - **Consequences:** The failure mode is a visible wrong-content-type response rather than a silent
   bypass, which is why D-040 chose positive patterns. A framework-level helper that derives the list
   from the registered routes would remove the chore, and is worth doing when M6 touches deployment.
+
+## D-055 — Tenant resolution: the binding-pool spike, and why it won
+
+- **Status:** Accepted · 2026-09-22 · closes the M6 spike required by D-012
+- **Context:** D-012 recorded that a tenant resolver cannot be "look up a database id and use it",
+  because Workers bindings are static and a script can hold roughly 5,000 of them. M6 had to choose a
+  mechanism. The three candidates were the D1 HTTP API, Workers for Platforms / dispatch namespaces,
+  and a bounded binding pool.
+- **Analysis:**
+  - **D1 HTTP API** (`POST /accounts/{id}/d1/database/{db_id}/query` with an API token) has no binding
+    ceiling and needs no redeploy per tenant. It costs a network hop on every query, bypasses the
+    binding's session and read-replication handling, needs an account-scoped token inside the Worker,
+    and makes each query a hand-built HTTP request — a large change to the query layer for a path
+    that is slower than the one it replaces.
+  - **Workers for Platforms / dispatch namespaces** scales furthest and gives each tenant real
+    isolation, but requires a platform account, a dispatch namespace, a per-tenant upload pipeline and
+    its own deployment story. It is the right answer for a host running customers' _code_; it is a lot
+    of machinery for running customers' _data_.
+  - **Bounded binding pool** (declared bindings, tenant → binding derived from a registry) keeps every
+    query on the fast path, keeps sessions and read replication working, and needs no new
+    infrastructure. Its limit is the binding ceiling, which is a real but distant wall: 5,000 tenant
+    databases is far beyond the point where a project would feel it.
+- **Decision:** Ship the binding pool. `clango.Tenant` in the control database records which tenants
+  exist and whether they are suspended; the binding is **derived** by `tenantBindingFor`
+  (`<DATABASE>_<SLUG>` by default, or a `bindingTemplate`), and `createRouter(config, env, { tenant })`
+  resolves every logical database to that tenant's binding. A missing tenant binding fails at router
+  construction, naming the binding, rather than silently falling back to the shared database.
+- **Consequences:** `clango migrate --all-tenants` reads the registry through wrangler and applies the
+  shared migrations to each active tenant's bindings, so tenant count stays a deployment concern.
+  Past the binding ceiling a project must move to dispatch namespaces — the tenant registry and the
+  router seam survive that move, which is why the registry stores only facts an operator decides.
+  The HTTP API remains available as a future driver behind the same `DriverFactory`.
+
+## D-056 — The driver seam is the router; the query layer is SQLite-shaped
+
+- **Status:** Accepted · 2026-09-22
+- **Context:** D-013 promised a driver interface so a project could later point apps at Postgres
+  through Hyperdrive. Being honest about what that requires matters more than a tidy abstraction: the
+  API and admin query layers are written against Drizzle's **SQLite** dialect (`sqliteTable`,
+  `SQLiteColumn`, `db.batch`), so a Postgres driver cannot be a drop-in handle swap.
+- **Decision:** The seam is `DatabaseRouter` + `DriverFactory`. A driver declares a `dialect`, exposes
+  the raw handle and a `session()`, and is built by a factory the caller can replace
+  (`createRouter(..., { driverFactory })`). Only the D1 driver ships. A Postgres driver would have to
+  provide a parallel query implementation for the SQLite-specific parts — the keyset predicate, the
+  bounded-count subquery, FTS5 search and `batch` — while `buildSchema` would emit Postgres tables.
+- **Consequences:** Model definitions, migrations and the admin metadata are already dialect-agnostic,
+  so the work is confined to `packages/api`, `packages/orm` and the FTS5 search path. Saying so
+  explicitly is more useful than an interface that implies a swap that would not compile.
+
+## D-057 — Reads run through a per-request D1 session
+
+- **Status:** Accepted · 2026-09-22 · implements the read-replication part of the spec
+- **Context:** D1 read replication lowers latency by serving reads from a nearby replica, but replica
+  lag makes read-after-write inconsistent unless every query in a request shares a session. Sessions
+  are per request, while the router and its drivers are cached per environment.
+- **Decision:** Drivers expose `session()`, which opens a new D1 session each call. The API and admin
+  layers create **one Drizzle client per request**, memoised on the request object, over that session.
+  All reads and writes in a request therefore share it: reads see the request's own writes, and once
+  read replication is enabled they are served by the nearest replica while writes still go to the
+  primary. Drizzle's D1 driver is typed against `D1Database`, so one documented adapter
+  (`drizzleOverSession`) bridges the two — a session provides everything Drizzle calls.
+- **Consequences:** Read-after-write is consistent without giving up replicas, and no code changes
+  when replication is switched on per database. The client cache is keyed by the `Request` object, so
+  it cannot leak between requests.
+
+## D-058 — The CLI bundle must be rebuilt after framework changes
+
+- **Status:** Accepted · 2026-09-22 · a consequence of D-026
+- **Context:** The CLI bundles `@clango/core` and `@clango/migrate` at build time. Adding
+  `clango.Tenant` to the registry produced "No changes detected" from `clango makemigrations`, because
+  the installed bundle still contained the previous registry.
+- **Decision:** Rebuild before trusting CLI output after a framework change:
+  `pnpm --filter @clango/cli build`. The `prepare` script covers a fresh checkout, and CI builds it
+  through `pnpm install`; only a long-running local session hits this.
+- **Consequences:** A misleading "no changes detected" is the symptom, which costs more time to
+  diagnose than the rebuild takes. Noted in `CLAUDE.md`.

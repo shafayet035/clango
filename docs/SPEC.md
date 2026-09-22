@@ -568,6 +568,31 @@ an admin action runs long in-request.
 apps at Postgres through Hyperdrive without changing model definitions. Only the D1 driver ships in
 v1, but the interface must exist from day one.
 
+> **v8 — implemented in M6.** `@clango/orm` gained the driver seam, tenancy and sessions; the CLI
+> gained `--all-tenants`.
+>
+> - **Cross-database relations are rejected at definition time.** `collectRegistry` walks every
+>   `foreignKey` and `manyToMany` and refuses a target in another database, naming both databases and
+>   the field, because D1 can neither join nor enforce a constraint across them.
+> - **The tenant spike is closed (D-055).** Of the D1 HTTP API, Workers for Platforms and a bounded
+>   binding pool, the pool shipped: it keeps queries on the fast path and sessions working, and its
+>   only limit is the ~5,000-binding ceiling. `clango.Tenant` in the control database records which
+>   tenants exist and whether they are suspended; the binding is **derived** (`<DATABASE>_<SLUG>` by
+>   default, or `tenants.bindingTemplate`). A request carrying `x-clango-tenant: acme` is served
+>   entirely from `DB_MAIN_ACME`; a missing binding fails at router construction naming the binding,
+>   never falling back to the shared database.
+> - **`clango migrate --all-tenants`** reads the registry through wrangler, skips suspended tenants,
+>   and applies the shared migrations to each tenant's bindings for every logical database.
+> - **Reads run through a per-request D1 session (D-057).** One Drizzle client per request, over one
+>   session, so reads see the request's own writes today and are served by a replica once read
+>   replication is enabled on the database.
+> - **The driver seam is the router (D-056).** `DriverFactory` and a `dialect` on the driver, with a
+>   documented account of what a Postgres driver would additionally have to implement — the keyset
+>   predicate, bounded counts, FTS5 search and `batch` are SQLite-shaped.
+>
+> Still to come: moving past the binding ceiling to dispatch namespaces if it is ever needed, and a
+> Postgres driver behind the existing seam.
+
 > **v2 — Hyperdrive is a pooler, not a provider.** It accelerates Workers→external Postgres/MySQL;
 > the project still has to bring a Postgres. That's fine for the escape hatch, but don't describe
 > Hyperdrive as the database in docs.
@@ -604,7 +629,26 @@ SPA as static assets rather than inside the Worker bundle.
 | M3 — Admin v1            | **Done**    | `@clango/admin-api` + `@clango/admin-ui` (HeroUI v3); 284 tests workspace-wide; admin API, audit log, cascade preview and SPA routing verified against D1 and over `wrangler dev` |
 | M4 — Auth + permissions  | **Done**    | `@clango/auth` + `@clango/auth-better-auth`; staff gate, per-operation permissions, groups, `createsuperuser`; 327 tests workspace-wide                                           |
 | M5 — Files, tasks, cache | **Done**    | `@clango/files` (R2 presign, cleanup, orphan sweep), `@clango/tasks` (Queues, cron, CSV), `@clango/cache` (KV); 431 tests workspace-wide                                          |
-| M6 — Scale features      | Not started |                                                                                                                                                                                   |
+| M6 — Scale features      | **Done**    | multi-database routing with cross-DB relation errors, binding-pool tenancy with `migrate --all-tenants`, per-request D1 sessions, driver seam; 460 tests workspace-wide           |
+| M7 — Polish              | Not started |                                                                                                                                                                                   |
+
+M6 evidence, recorded 2026-09-22:
+
+- Cross-database relations: accepted inside one database, rejected across two with an error naming the
+  field and both databases, and the same check for a many-to-many whose join table would land in the
+  wrong place.
+- Tenancy: binding derivation for the default and templated shapes, `x-clango-tenant` extraction,
+  per-tenant routing of every logical database, and a missing tenant binding failing at construction
+  with the binding name in the message.
+- Sessions: a fresh session per call, a session-backed driver usable by Drizzle, and the request-scoped
+  client cache.
+- `migrate --all-tenants`: registry SQL, tolerant parsing of wrangler's JSON, suspended tenants
+  skipped, and the tenants × databases plan in a stable order. Verified end to end against the local
+  D1 — the registry was read, the suspended tenant skipped, and all five migrations applied to
+  `DB_MAIN_ACME`.
+- The blog now enables tenancy: a row written with `x-clango-tenant: acme` exists in `DB_MAIN_ACME`
+  and not in `DB_MAIN`, an unbound tenant fails loudly rather than reading the shared database, and a
+  request without the header still uses the shared one.
 
 M5 evidence, recorded 2026-09-22:
 
@@ -688,7 +732,7 @@ before anything else is added.
 | M3  | Admin v1            | Meta endpoint; SPA with sidebar, list (sort, filter, search, bounded counts), edit form with fieldsets and FK search, delete with cascade preview; admin log table written in the mutation batch; SPA/API routing fallthrough tests                                                                                                      |
 | M4  | Auth + permissions  | ✅ `AuthAdapter` interface + Better Auth adapter; auto model permissions; groups; `isStaff` gate; `clango createsuperuser`; admin hides what users can't access; tests for each permission                                                                                                                                               |
 | M5  | Files, tasks, cache | ✅ R2 file/image fields with presigned uploads (aws4fetch + S3 token + CORS), orphan sweep and delete cleanup; `defineTask` on Queues with DLQ and per-message ack/retry; admin bulk actions enqueue query descriptors; Workflows CSV import/export; cron schedules; KV cache helpers                                                    |
-| M6  | Scale features      | Multi-database routing with cross-DB relation errors; **tenant-resolution spike completed and recorded**; database-per-tenant mode and `migrate --all-tenants`; D1 read replicas via Sessions API; driver interface for future Postgres                                                                                                  |
+| M6  | Scale features      | ✅ Multi-database routing with cross-DB relation errors; **tenant-resolution spike completed and recorded**; database-per-tenant mode and `migrate --all-tenants`; D1 read replicas via Sessions API; driver interface for future Postgres                                                                                               |
 | M7  | Polish              | Browser Rendering PDF export action (Workflow-backed); row edit locks via a sharded Durable Object pool; custom admin widgets; `clango init` / `startapp` generators; docs site                                                                                                                                                          |
 
 Each milestone ends with the Definition of done checklist from the Instructions section.
@@ -826,3 +870,18 @@ Recorded at the end of M1, after verifying the migration engine against the Work
 35. CSV import/export provided as pure, paged helpers for Workflows (D-053).
 36. Cache TTLs validated against KV's 60-second minimum (D-048).
 37. Recorded the recurring `run_worker_first` footgun as D-054, with the blog's route list updated.
+
+## Change log (M6)
+
+38. Cross-database relations are rejected at definition time, naming both databases (D-055's premise
+    and the spec's "cross-database relations are rejected" rule).
+39. Tenant spike closed: the bounded binding pool chosen over the D1 HTTP API and Workers for
+    Platforms, with the analysis and the consequences recorded (D-055).
+40. Tenant registry, derived bindings, request routing and `migrate --all-tenants` implemented; the
+    blog exercises database-per-tenant end to end.
+41. Reads run through a per-request D1 session, so read replication can be enabled per database
+    without code changes (D-057).
+42. The driver seam documented honestly: the router is the seam, and the query layer's SQLite-shaped
+    parts are named as the work a Postgres driver would owe (D-056).
+43. Recorded that the CLI bundle must be rebuilt after a framework change, and why that produced a
+    misleading "no changes detected" (D-058).
