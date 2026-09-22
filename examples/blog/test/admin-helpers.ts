@@ -2,9 +2,11 @@ import { Authorization } from "@clango/auth";
 import { collectRegistry } from "@clango/core";
 import { buildSchema } from "@clango/orm";
 import { env } from "cloudflare:workers";
+import { createExecutionContext } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 
 import config from "../clango.config";
+import worker from "../src/index";
 
 /** Email the admin tests act as. Appointed as a superuser before the suite runs. */
 export const SUPERUSER = "admin@example.com";
@@ -65,11 +67,14 @@ export async function call(
   path: string,
   init?: RequestInit,
 ): Promise<CallResult> {
-  const { exports } = await import("cloudflare:workers");
   const headers = new Headers(init?.headers);
   if (email !== null) headers.set("x-dev-user", email);
   if (init?.body !== undefined) headers.set("content-type", "application/json");
-  const response = await exports.default.fetch(`https://example.com${path}`, { ...init, headers });
+  const response = await worker.fetch(
+    new Request(`https://example.com${path}`, { ...init, headers }),
+    env,
+    createExecutionContext(),
+  );
   const text = await response.text();
   const contentType = response.headers.get("content-type") ?? "";
   return {

@@ -3,6 +3,7 @@
   "name": "clango-admin-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-22",
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "clango-admin-files" }],
   "d1_databases": [
     {
       "binding": "DB_MAIN",
@@ -10,4 +11,9 @@
       "database_id": "00000000-0000-0000-0000-000000000000",
     },
   ],
+  "vars": {
+    "R2_ACCOUNT_ID": "testaccount",
+    "R2_ACCESS_KEY_ID": "testkey",
+    "R2_SECRET_ACCESS_KEY": "testsecret",
+  },
 }

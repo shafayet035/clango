@@ -5,14 +5,23 @@ import {
   type AnyModel,
   type Field,
 } from "@clango/core";
+import type { Enqueuer } from "@clango/tasks";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 
 /** Context handed to an admin action handler. */
 export interface AdminActionContext {
   readonly model: AnyModel;
-  /** Id of the staff user running the action. `null` until authentication lands in M4. */
+  /** Id of the staff user running the action, or `null` when auth is disabled. */
   readonly userId: string | null;
   readonly db: DrizzleD1Database;
+  /**
+   * Sends a registered task to the Queues producer.
+   *
+   * Present only when `tasks.binding` is configured. An action that may exceed the Worker CPU budget
+   * should hand work to a task rather than doing it in the request — and should prefer a query
+   * descriptor over an id list, so the payload does not grow with the selection (D-011).
+   */
+  readonly enqueue?: Enqueuer;
 }
 
 /** A bulk action offered in the admin list view. */

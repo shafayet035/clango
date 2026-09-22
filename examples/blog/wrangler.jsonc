@@ -13,7 +13,25 @@
     // Every Worker-owned route is listed explicitly. Anything not listed falls through to the SPA,
     // so a forgotten route shows the admin shell rather than a silent 404 — which is why this is a
     // positive list instead of a catch-all with exclusions.
-    "run_worker_first": ["/", "/health", "/api/*", "/admin/api/*"],
+    "run_worker_first": ["/", "/health", "/stats", "/api/*", "/admin/api/*"],
+  },
+  "kv_namespaces": [{ "binding": "CACHE", "id": "clango-blog-cache" }],
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "clango-blog-files" }],
+  "queues": {
+    "producers": [{ "binding": "TASKS", "queue": "clango-blog-tasks" }],
+    "consumers": [
+      {
+        "queue": "clango-blog-tasks",
+        "max_batch_size": 10,
+        "max_retries": 3,
+        // The framework's default: retries are bounded and failures end up here rather than
+        // disappearing.
+        "dead_letter_queue": "clango-blog-tasks-dlq",
+      },
+    ],
+  },
+  "triggers": {
+    "crons": ["0 3 * * *"],
   },
   "d1_databases": [
     {

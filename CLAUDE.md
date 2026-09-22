@@ -8,8 +8,8 @@ Orientation for this repo. Read this first, then `docs/SPEC.md`.
 schema, migrations, a REST API and a generic admin panel. `docs/SPEC.md` is the authoritative spec;
 `docs/DECISIONS.md` records every non-obvious choice (ADR style, append-only).
 
-**Status:** M0–M4 complete (scaffold, models + migrations, REST API, admin, auth + permissions).
-Next: M5 (files, tasks, cache).
+**Status:** M0–M5 complete (scaffold, models + migrations, REST API, admin, auth + permissions,
+files/tasks/cache). Next: M6 (scale features).
 
 ## Non-negotiables
 
@@ -37,7 +37,9 @@ packages/
   admin-ui/ @clango/admin-ui  — React + HeroUI v3 SPA (Vite build, served as static assets)
   auth/     @clango/auth      — AuthAdapter contract, permission engine, staff gate, middleware
   auth-better-auth/ @clango/auth-better-auth — Better Auth reference adapter
-  (planned: files, tasks, cache)
+  files/    @clango/files   — R2 keys, presigned uploads, cleanup, orphan sweep
+  tasks/    @clango/tasks   — Queues tasks, cron schedules, CSV pipelines for Workflows
+  cache/    @clango/cache   — KV helpers (eventually consistent; never for auth state)
 examples/
   blog/     the reference app used by every milestone
 docs/       SPEC.md (authoritative spec), DECISIONS.md (ADR log)
@@ -113,6 +115,17 @@ See `docs/DECISIONS.md` for the reasoning. Short version:
   bindings from the `env` passed to `getUser`/`handler`, not at config time (D-046).
 - The blog's dev identity adapter trusts `x-dev-user` **only** when `ALLOW_DEV_AUTH=true`; never set
   that on a deployed Worker (D-045).
+- **Add every new Worker route to `run_worker_first`.** The list is positive, so an unlisted route is
+  answered by the asset layer with the SPA shell — a 200 with the wrong content type and no error
+  anywhere (D-040, D-054).
+- R2 presigned URLs need an S3 API token: the binding cannot sign, the credentials are read from the
+  environment per request, and only `GET`/`HEAD`/`PUT`/`DELETE` can be signed (D-049).
+- KV rejects an `expirationTtl` under 60 seconds; `@clango/cache` enforces that at the call site
+  rather than letting it surface as a 500 (D-048).
+- Deleting a record defers file cleanup to a task when `tasks.binding` is set, and deletes inline when
+  it is not — never leave a project leaking objects because it has no queue (D-050).
+- A cron expression must appear in **both** `defineSchedule` and `wrangler.jsonc`'s `triggers.crons`
+  (D-052).
 - Raw `sql` fragments bypass Drizzle's column mapping: convert values with `toDriverValue` before
   binding a `Date` or `boolean`, or D1 rejects them with `D1_TYPE_ERROR` (D-030).
 - Hono does not carry a sub-app's `notFound` across `route()`; `mountApi` installs the JSON handlers

@@ -111,6 +111,18 @@
           "notNull": false
         },
         {
+          "name": "cover",
+          "property": "cover",
+          "type": "TEXT",
+          "notNull": false
+        },
+        {
+          "name": "attachment",
+          "property": "attachment",
+          "type": "TEXT",
+          "notNull": false
+        },
+        {
           "name": "status",
           "property": "status",
           "type": "TEXT",

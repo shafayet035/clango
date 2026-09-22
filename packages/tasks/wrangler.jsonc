@@ -1,0 +1,9 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "clango-tasks",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-22",
+  "queues": {
+    "producers": [{ "binding": "TASKS", "queue": "clango-tasks" }],
+  },
+}

@@ -5,6 +5,7 @@ import {
   columnFor,
   newUlid,
   permissionCodename,
+  toSnakeCase,
   type PermissionAction,
   type AnyModel,
   type ClangoConfig,
@@ -21,6 +22,16 @@ import {
   readJsonBody,
   validationFailed,
 } from "@clango/api";
+import {
+  buildFileKey,
+  createFileStorage,
+  ensureFileCleanupTask,
+  fileKeysIn,
+  newUploadRecordId,
+  parseFileKey,
+  type FileStorage,
+} from "@clango/files";
+import { createEnqueuer, type Enqueuer } from "@clango/tasks";
 import {
   buildSchema,
   createD1Router,
@@ -150,13 +161,18 @@ interface AdminContext<TBindings extends object> {
   readonly databaseFor: (env: object, database: string) => DrizzleD1Database;
   readonly bindingFor: (env: object, database: string) => D1Database;
   readonly authEnabled: boolean;
+  /** Present when R2 file storage is configured. */
+  readonly storageFor?: (env: object) => FileStorage;
+  /** Present when a Queues producer is configured. */
+  readonly enqueuerFor?: (env: object) => Enqueuer;
 }
 
 function registerModelRoutes<TBindings extends object>(
   context: AdminContext<TBindings>,
   entry: RegisteredModel,
 ): void {
-  const { app, registry, logTable, databaseFor, bindingFor, authEnabled } = context;
+  const { app, registry, logTable, databaseFor, bindingFor, authEnabled, storageFor, enqueuerFor } =
+    context;
   const model = entry.model;
 
   /**
@@ -261,10 +277,67 @@ function registerModelRoutes<TBindings extends object>(
     const ids = [...new Set(body.ids as string[])].slice(0, MAX_ACTION_IDS);
     if (ids.length === 0) throw badRequest("Select at least one row.");
 
-    const actionContext: AdminActionContext = { model, userId: userId(user), db: db(c.env) };
+    const actionContext: AdminActionContext = {
+      model,
+      userId: userId(user),
+      db: db(c.env),
+      // Present only when a Queues producer is bound, so a short action can run inline and a long
+      // one can hand a query descriptor to a consumer instead of listing ids (D-011).
+      ...(enqueuerFor === undefined ? {} : { enqueue: enqueuerFor(c.env) }),
+    };
     await action.handler(ids, actionContext);
     return c.json({ data: { action: action.name, affected: ids.length } });
   });
+
+  if (storageFor !== undefined) {
+    /**
+     * Hands the client a presigned PUT.
+     *
+     * The key is issued before the record exists, which is why it carries a record id the client
+     * sends back when it saves: an abandoned upload then lives under an id no row ever claims, and
+     * the orphan sweep can find it.
+     */
+    app.post(`${base}/uploads`, async (c) => {
+      const storage = storageFor(c.env);
+      const body = (await readJsonBody(c.req.raw)) as {
+        filename?: unknown;
+        contentType?: unknown;
+        recordId?: unknown;
+      };
+      if (typeof body.filename !== "string" || body.filename.length === 0) {
+        throw badRequest('Expected a body of the form { "filename": "cover.png" }.');
+      }
+      const recordId =
+        typeof body.recordId === "string" && body.recordId.length > 0
+          ? body.recordId
+          : newUploadRecordId();
+      authorize(c, typeof body.recordId === "string" ? "change" : "add");
+
+      const key = buildFileKey({ model, recordId, filename: body.filename });
+      const signed = await storage.signUpload(
+        key,
+        typeof body.contentType === "string" ? { contentType: body.contentType } : {},
+      );
+      return c.json({ data: signed }, 201);
+    });
+  }
+
+  /** Queues deletion of the objects a row referenced. */
+  async function enqueueCleanup(env: object, keys: readonly string[]): Promise<void> {
+    if (keys.length === 0) return;
+    const enqueue = enqueuerFor?.(env);
+    if (enqueue === undefined) {
+      // Without a queue there is nothing to defer to, so remove them now rather than leak.
+      await storageFor?.(env).delete(keys);
+      return;
+    }
+    const task = ensureFileCleanupTask((target) => {
+      const storage = storageFor?.(target);
+      if (storage === undefined) throw new ClangoError("File storage is not configured.");
+      return storage;
+    });
+    await enqueue(task, { keys: [...keys] });
+  }
 
   app.post(base, async (c) => {
     const user = authorize(c, "add");
@@ -358,7 +431,16 @@ function registerModelRoutes<TBindings extends object>(
       client.update(table).set(values).where(eq(idColumn, id)).returning(),
       client.insert(logTable).values(log),
     ])) as unknown[];
-    return c.json({ data: asRecords(results[0])[0] });
+    const updated = asRecords(results[0])[0];
+    if (updated !== undefined && storageFor !== undefined) {
+      // Only the keys this write replaced: re-saving a row must not delete the files it still uses.
+      const after = fileKeysIn(model, updated);
+      await enqueueCleanup(
+        c.env,
+        fileKeysIn(model, before).filter((key) => !after.includes(key)),
+      );
+    }
+    return c.json({ data: updated });
   });
 
   app.delete(`${base}/:id`, async (c) => {
@@ -381,6 +463,7 @@ function registerModelRoutes<TBindings extends object>(
       client.insert(logTable).values(log),
     ])) as unknown[];
     if (asRecords(results[0]).length === 0) throw notFound(model.name, id);
+    await enqueueCleanup(c.env, fileKeysIn(model, before));
     return c.body(null, 204);
   });
 }
@@ -428,6 +511,28 @@ export function createAdminApp<TBindings extends object = object>(
     return router;
   }
 
+  const filesConfig = config.files;
+  const storageFor =
+    filesConfig === undefined ? undefined : (env: object) => createFileStorage(env, filesConfig);
+
+  const queues = new WeakMap<object, Enqueuer>();
+  const tasksBinding = config.tasks?.binding;
+  const enqueuerFor =
+    tasksBinding === undefined
+      ? undefined
+      : (env: object) => {
+          let enqueuer = queues.get(env);
+          if (enqueuer === undefined) {
+            const queue = (env as Record<string, unknown>)[tasksBinding];
+            if (queue === undefined) {
+              throw new ClangoError(`Missing Queues binding "${tasksBinding}".`);
+            }
+            enqueuer = createEnqueuer(queue as Queue);
+            queues.set(env, enqueuer);
+          }
+          return enqueuer;
+        };
+
   const context: AdminContext<TBindings> = {
     app,
     registry,
@@ -435,21 +540,62 @@ export function createAdminApp<TBindings extends object = object>(
     databaseFor: (env, database) => drizzle(routerFor(env).database(database).db),
     bindingFor: (env, database) => routerFor(env).database(database).db,
     authEnabled,
+    ...(storageFor === undefined ? {} : { storageFor }),
+    ...(enqueuerFor === undefined ? {} : { enqueuerFor }),
   };
+
+  const downloadPath = config.files?.downloadPath ?? "/files";
 
   if (authEnabled) {
     // Middleware must be registered before the routes it guards: Hono runs handlers in registration
     // order, so middleware added afterwards never runs for them.
-    app.use(
-      "/admin/api/*",
-      clangoAuth<TBindings>({
-        config,
-        authorization,
-        databaseFor: (env: object) => drizzle(routerFor(env).database(systemDatabase).db),
-      }),
-    );
+    const authorizeRequest = clangoAuth<TBindings>({
+      config,
+      authorization,
+      databaseFor: (env: object) => drizzle(routerFor(env).database(systemDatabase).db),
+    });
+    app.use("/admin/api/*", authorizeRequest);
+    app.use(`${downloadPath}/*`, authorizeRequest);
     // The SPA itself stays reachable so it can explain the 401; the API is what holds the data.
+    // Downloads are gated by model permission rather than staff status, so a read-only account can
+    // fetch the files attached to rows it is allowed to see.
     app.use("/admin/api/*", requireStaff<TBindings>());
+  }
+
+  if (config.files !== undefined && storageFor !== undefined) {
+    app.get(`${downloadPath}/*`, async (c) => {
+      const prefix = `${downloadPath}/`;
+      const path = new URL(c.req.url).pathname;
+      const key = decodeURIComponent(path.startsWith(prefix) ? path.slice(prefix.length) : "");
+      const parsed = parseFileKey(key);
+      if (parsed === null) throw new ApiError(404, "not_found", "No such file.");
+
+      const entry = registry.models.find(
+        (candidate) =>
+          candidate.model.appLabel === parsed.appLabel &&
+          toSnakeCase(candidate.model.modelName) === parsed.model,
+      );
+      if (entry === undefined) throw new ApiError(404, "not_found", "No such file.");
+
+      const viewer = c.get("clangoUser") ?? null;
+      if (authEnabled) {
+        if (viewer === null) throw new ApiError(401, "unauthenticated", "Sign in to continue.");
+        const codename = permissionCodename(entry.model, "view");
+        if (!can(viewer, codename)) {
+          throw new ApiError(403, "forbidden", `Missing permission "${codename}".`);
+        }
+      }
+
+      const object = await storageFor(c.env).object(key);
+      if (object === null) throw new ApiError(404, "not_found", "No such file.");
+
+      const headers = new Headers();
+      object.writeHttpMetadata(headers);
+      headers.set("etag", object.httpEtag);
+      // Private: the response depends on the caller's permissions, so it must not be shared.
+      headers.set("cache-control", "private, max-age=60");
+      return new Response(object.body, { headers });
+    });
   }
 
   for (const entry of registry.models) {

@@ -466,6 +466,35 @@ enqueues cleanup of its files.
 - Model lifecycle hooks (`beforeSave`, `afterSave`, `afterDelete`) run in-request; anything slow
   must enqueue a task instead.
 
+> **v7 — implemented in M5.** `@clango/files`, `@clango/tasks` and `@clango/cache`, with the blog
+> wiring all three.
+>
+> - **Tasks.** `defineTask(name, zodSchema, handler)` registers a handler and the Worker's `queue`
+>   export runs `handleQueueBatch`. The consumer wraps every message in its own try/catch and uses
+>   explicit `ack()`/`retry()`, because an uncaught error retries the _entire_ batch. Invalid
+>   payloads and unknown task names are acknowledged rather than retried, since retrying them can
+>   never succeed. `createEnqueuer(queue)` validates a payload before it is sent, so a bad payload
+>   fails where the request context still exists.
+> - **Actions.** `AdminActionContext.enqueue` is present when `tasks.binding` is configured. The
+>   blog's publish action enqueues a task instead of writing in the request, which is the pattern for
+>   anything that may exceed the Worker CPU budget.
+> - **Files.** `POST /admin/api/<app>/<model>/uploads` issues a presigned PUT for a namespaced key
+>   (`<app>/<model>/<record id>/<uuid>-<filename>`); the client uploads straight to R2 and stores the
+>   key. `GET /files/<key>` streams private objects after checking the caller's `view` permission on
+>   the owning model. Deleting or re-pointing a file field enqueues `clango.cleanup_files`, and
+>   `sweepOrphans` collects uploads no record ever claimed (D-049…D-051).
+> - **Schedules.** `defineSchedule(name, "0 3 * * *", handler)` registers a cron handler and the
+>   Worker's `scheduled` export routes the wake-up to the schedules that match. The expression must
+>   also be listed under `triggers.crons` in `wrangler.jsonc` (D-052).
+> - **CSV.** `exportCsv` and `importCsv` page a table one chunk at a time and never hold it in
+>   memory, so a Workflow can drive them across steps (D-053).
+> - **Cache.** `createCache(env.CACHE, { prefix })` wraps KV with `get`/`set`/`wrap`/`invalidate` and
+>   rejects TTLs shorter than KV's 60-second minimum (D-048). The blog's `/stats` route demonstrates
+>   a read-heavy, staleness-tolerant endpoint.
+>
+> Still to come: a Workflow-backed CSV job in the example (the helpers are tested; the Workflow
+> runtime is not exercised in the test pool), and generating `run_worker_first` from the routes.
+
 > **v2 — queue payload discipline.** Queues cap messages at 128 KB and an uncaught error retries the
 > **entire batch**, so the task runtime must wrap every message in its own `try/catch` with explicit
 > `ack()`/`retry()`. For bulk actions, never enqueue a raw id list: enqueue a _query descriptor_
@@ -574,7 +603,26 @@ SPA as static assets rather than inside the Worker bundle.
 | M2 — Generated REST API  | **Done**    | `@clango/api`; 212 tests workspace-wide; create/list/filter/search/paginate/update/delete verified against D1 and over `wrangler dev`                                             |
 | M3 — Admin v1            | **Done**    | `@clango/admin-api` + `@clango/admin-ui` (HeroUI v3); 284 tests workspace-wide; admin API, audit log, cascade preview and SPA routing verified against D1 and over `wrangler dev` |
 | M4 — Auth + permissions  | **Done**    | `@clango/auth` + `@clango/auth-better-auth`; staff gate, per-operation permissions, groups, `createsuperuser`; 327 tests workspace-wide                                           |
-| M5 — Files, tasks, cache | Not started |                                                                                                                                                                                   |
+| M5 — Files, tasks, cache | **Done**    | `@clango/files` (R2 presign, cleanup, orphan sweep), `@clango/tasks` (Queues, cron, CSV), `@clango/cache` (KV); 431 tests workspace-wide                                          |
+| M6 — Scale features      | Not started |                                                                                                                                                                                   |
+
+M5 evidence, recorded 2026-09-22:
+
+- Tasks: registration and validation rules, per-message ack/retry, a failing message not taking down
+  the batch (asserted against a real `MessageBatch` from `cloudflare:test`), unknown tasks and bad
+  payloads acknowledged, and producer-side validation before a message is sent.
+- Cron: field parsing, UTC matching, the day-of-month/day-of-week OR rule, routing a trigger to the
+  matching schedules, and rejecting an invalid expression at definition time.
+- CSV: quoting and embedded newlines round-trip, header written once across chunks, an empty table
+  still producing a parsable file, batching on import, and failures collected rather than thrown.
+- Files: key namespacing and sanitisation, traversal rejected, presigned URL shape (host, key,
+  expiry, signature, signed headers), TTL bounds, streaming a download under a `view` permission,
+  refusing a model the caller cannot read, and cleanup both deferred (blog) and inline (no producer).
+- Cache: JSON round-trip including falsy values, prefix namespacing, read-through `wrap` not caching a
+  rejection, prefix invalidation with a limit, and the 60-second TTL guard.
+- Verified against `wrangler dev`: `/stats` served from KV, a presigned upload URL issued with a
+  namespaced key, the publish action accepted and enqueued, and the R2 credential error reported by
+  name when the secret is absent. Adding `/stats` also reproduced the D-040 footgun, now D-054.
 
 M4 evidence, recorded 2026-09-22:
 
@@ -639,7 +687,7 @@ before anything else is added.
 | M2  | Generated REST API  | ✅ CRUD routes with Zod validation, cursor pagination, filters, search (FTS5 `MATCH`, never `LIKE` on user input); opt-in exposure; bounded count helper; tests for every op and validation error                                                                                                                                        |
 | M3  | Admin v1            | Meta endpoint; SPA with sidebar, list (sort, filter, search, bounded counts), edit form with fieldsets and FK search, delete with cascade preview; admin log table written in the mutation batch; SPA/API routing fallthrough tests                                                                                                      |
 | M4  | Auth + permissions  | ✅ `AuthAdapter` interface + Better Auth adapter; auto model permissions; groups; `isStaff` gate; `clango createsuperuser`; admin hides what users can't access; tests for each permission                                                                                                                                               |
-| M5  | Files, tasks, cache | R2 file/image fields with presigned uploads (aws4fetch + S3 token + CORS), orphan sweep and delete cleanup; `defineTask` on Queues with DLQ and per-message ack/retry; admin bulk actions enqueue query descriptors; Workflows CSV import/export; cron schedules; KV cache helpers                                                       |
+| M5  | Files, tasks, cache | ✅ R2 file/image fields with presigned uploads (aws4fetch + S3 token + CORS), orphan sweep and delete cleanup; `defineTask` on Queues with DLQ and per-message ack/retry; admin bulk actions enqueue query descriptors; Workflows CSV import/export; cron schedules; KV cache helpers                                                    |
 | M6  | Scale features      | Multi-database routing with cross-DB relation errors; **tenant-resolution spike completed and recorded**; database-per-tenant mode and `migrate --all-tenants`; D1 read replicas via Sessions API; driver interface for future Postgres                                                                                                  |
 | M7  | Polish              | Browser Rendering PDF export action (Workflow-backed); row edit locks via a sharded Durable Object pool; custom admin widgets; `clango init` / `startapp` generators; docs site                                                                                                                                                          |
 
@@ -767,3 +815,14 @@ Recorded at the end of M1, after verifying the migration engine against the Work
     has no environment (D-046).
 31. Recorded that permissions gate the admin, while the REST API keeps opt-in exposure as its
     control (D-047).
+
+## Change log (M5)
+
+32. Tasks: per-message ack/retry with a bounded retry budget, producer-side validation, and an
+    `enqueue` on the admin action context (D-050's mechanism).
+33. Files: presigned uploads with an S3 token resolved per request (D-049), cleanup deferred to a
+    task with an inline fallback (D-050), and a bounded, age-guarded orphan sweep (D-051).
+34. Cron matching implemented in the framework so schedules are testable without deploying (D-052).
+35. CSV import/export provided as pure, paged helpers for Workflows (D-053).
+36. Cache TTLs validated against KV's 60-second minimum (D-048).
+37. Recorded the recurring `run_worker_first` footgun as D-054, with the blog's route list updated.

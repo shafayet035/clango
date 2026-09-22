@@ -21,6 +21,46 @@ export interface AdminConfig {
   database?: string;
 }
 
+/**
+ * R2 file storage.
+ *
+ * The R2 binding cannot sign URLs, so presigned uploads need an S3 API token: an access key id and
+ * secret (stored as Worker secrets, referenced here by binding name), plus the account id and
+ * bucket name that make up the S3 endpoint.
+ */
+export interface FilesConfig {
+  /** R2 binding name, used for reads, writes and deletes from the Worker. */
+  readonly binding: string;
+  /** Bucket name, used to build the S3 endpoint host. */
+  readonly bucket: string;
+  /** Binding name holding the Cloudflare account id. */
+  readonly accountId: string;
+  /** Binding name holding the S3 access key id. */
+  readonly accessKeyId: string;
+  /** Binding name holding the S3 secret access key. */
+  readonly secretAccessKey: string;
+  /** Path private downloads are served from. Defaults to `/files`. */
+  readonly downloadPath?: string;
+  /** Default upload URL lifetime in seconds. Defaults to 900. */
+  readonly uploadTtlSeconds?: number;
+}
+
+/** Queues producer used by admin actions and file cleanup. */
+export interface TasksConfig {
+  /** Queue binding name. */
+  readonly binding: string;
+  /** Queue name, for logging. Defaults to the binding name. */
+  readonly queue?: string;
+}
+
+/** KV-backed caching for read-heavy, staleness-tolerant data. */
+export interface CacheConfig {
+  /** KV binding name. */
+  readonly binding: string;
+  /** Key namespace. Defaults to `clango:`. */
+  readonly prefix?: string;
+}
+
 /** The shape of `clango.config.ts`. */
 export interface ClangoConfig<TApps extends readonly App[] = readonly App[]> {
   apps: TApps;
@@ -30,6 +70,12 @@ export interface ClangoConfig<TApps extends readonly App[] = readonly App[]> {
   admin?: AdminConfig;
   /** Enables authentication and the permission system. */
   auth?: AuthConfig;
+  /** Enables R2 file and image fields. */
+  files?: FilesConfig;
+  /** Enables the KV cache helpers. */
+  cache?: CacheConfig;
+  /** Enables background tasks: admin actions and file cleanup are enqueued here. */
+  tasks?: TasksConfig;
 }
 
 /**
@@ -124,6 +170,32 @@ export function defineConfig<const TApps extends readonly App[]>(
     if (config.auth.database !== undefined && typeof config.auth.database !== "string") {
       throw new ModelDefinitionError("defineConfig `auth.database` must be a string.");
     }
+  }
+  if (config.files !== undefined) {
+    for (const key of [
+      "binding",
+      "bucket",
+      "accountId",
+      "accessKeyId",
+      "secretAccessKey",
+    ] as const) {
+      const value = config.files[key];
+      if (typeof value !== "string" || value.length === 0) {
+        throw new ModelDefinitionError(`defineConfig \`files.${key}\` must be a non-empty string.`);
+      }
+    }
+  }
+  if (
+    config.cache !== undefined &&
+    (typeof config.cache.binding !== "string" || config.cache.binding.length === 0)
+  ) {
+    throw new ModelDefinitionError("defineConfig `cache.binding` must be a non-empty string.");
+  }
+  if (
+    config.tasks !== undefined &&
+    (typeof config.tasks.binding !== "string" || config.tasks.binding.length === 0)
+  ) {
+    throw new ModelDefinitionError("defineConfig `tasks.binding` must be a non-empty string.");
   }
   if (config.databases !== undefined) {
     if (typeof config.databases !== "object" || config.databases === null) {

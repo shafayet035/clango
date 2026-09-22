@@ -672,3 +672,99 @@ controller,service,schema}.ts`. That structure pays off when each feature has ha
 - **Consequences:** The two surfaces have clearly different models: the admin is a privileged
   operator console, the API is an opt-in public interface. If a future milestone wants per-user API
   access, the middleware already exists to compose.
+
+## D-048 — Cache TTLs are validated before they reach KV
+
+- **Status:** Accepted · 2026-09-22
+- **Context:** KV rejects an `expirationTtl` below 60 seconds with a `400`. The first version of the
+  blog's `/stats` route used 30 seconds, which surfaced as a `500` from the Worker — a confusing way
+  to learn a platform rule that was knowable at the call site.
+- **Decision:** `Cache.set` and `Cache.wrap` reject a TTL below `MIN_TTL_SECONDS` (60) with a message
+  naming the limit, and `MIN_TTL_SECONDS` is exported so callers can reason about it.
+- **Consequences:** A misconfigured TTL fails at the call with the rule stated, rather than as a
+  failed request. The guard has its own test.
+
+## D-049 — Presigned uploads need an S3 token, resolved per request
+
+- **Status:** Accepted · 2026-09-22 · implements D-010
+- **Context:** The R2 binding cannot sign URLs. Signing needs an account id, a bucket name and an S3
+  API token — and `clango.config.ts` is evaluated by the CLI as well as the Worker, so it has no
+  environment and cannot hold the credentials themselves.
+- **Decision:** `config.files` names the bindings (`accountId`, `accessKeyId`, `secretAccessKey`) and
+  `createFileStorage(env, config)` reads them from the environment on each call. Signing uses
+  `aws4fetch` with `allHeaders: true`, so the declared content type is part of the signature and an
+  upload cannot arrive as something else. Upload URLs default to a 15-minute expiry and are clamped
+  to R2's 1-second-to-7-day range.
+- **Consequences:** Secrets stay in the environment, and a missing binding produces a named error
+  rather than a failed upload. Presigned URLs still cannot be revoked (D-010), which is why the key
+  is treated as untrusted until a record references it and why orphans are swept (D-051).
+
+## D-050 — File cleanup is deferred to a task; delete never leaks
+
+- **Status:** Accepted · 2026-09-22
+- **Context:** Deleting a record must not leave its objects behind, but deleting objects inline makes
+  a request depend on R2 latency and cannot be retried. The opposite — always deferring — leaks the
+  objects of any project that has not configured a Queues producer.
+- **Decision:** The delete and update paths collect the keys the row no longer references and call
+  `enqueueCleanup`. With `tasks.binding` configured the keys go to the `clango.cleanup_files` task,
+  which retries with a 5-minute delay; without a producer the keys are deleted inline so nothing
+  leaks. Updates only enqueue keys the write actually replaced, and the task takes keys rather than
+  record ids, so the same code path is driven by the orphan sweep.
+- **Consequences:** Tests cover both behaviours: `@clango/admin-api` asserts inline deletion with no
+  producer, and the blog asserts that a delete is _deferred_ when one is configured and that running
+  the cleanup task through the consumer removes the object.
+
+## D-051 — Orphan sweeps are bounded and age-guarded
+
+- **Status:** Accepted · 2026-09-22
+- **Context:** A presigned URL hands the client a key before the record exists, so an abandoned
+  upload leaves an object no row references. Sweeping must not delete uploads that are still in
+  flight, must not wander outside the model's prefix, and must not scan an entire bucket.
+- **Decision:** `sweepOrphans` lists one model's prefix, ignores objects younger than an hour by
+  default, and treats an object as referenced when a row with its record id exists. Keys are checked
+  with chunked queries (D-009) and each model is capped by a `limit`.
+- **Consequences:** The sweep is safe to run on a schedule and cheap to reason about; the age guard
+  means an abandoned upload is collected on a later run rather than immediately.
+
+## D-052 — Cron matching lives in the framework
+
+- **Status:** Accepted · 2026-09-22
+- **Context:** Cloudflare wakes the Worker with the expression that fired, but nothing routes that
+  wake-up to a handler, and a Worker with several schedules needs to know which ones to run. Testing
+  a schedule should not require deploying and waiting.
+- **Decision:** `defineSchedule(name, expression, handler)` registers a handler and
+  `handleScheduled(event, env)` runs the schedules whose expression matches and whose fields match the
+  fired time. The five-field parser supports `*`, values, ranges, lists and steps, uses UTC, and
+  implements cron's OR rule for restricted day-of-month and day-of-week. The expression must also be
+  declared in `wrangler.jsonc` under `triggers.crons`.
+- **Consequences:** Schedules are unit-tested without deploying, and a Worker can host many of them.
+  A CI check that the registered expressions appear in `wrangler.jsonc` would close the remaining gap
+  between what is registered and what Cloudflare fires.
+
+## D-053 — CSV pipelines are pure helpers a Workflow drives
+
+- **Status:** Accepted · 2026-09-22
+- **Context:** The spec puts CSV import and export on Workflows so a long job survives restarts. A
+  Workflow's value is its step model, but the encodings and the paging are the parts worth testing and
+  the parts that are easy to get wrong (quoting, embedded newlines, footer-less chunks, retryable
+  batches).
+- **Decision:** `@clango/tasks` provides `exportCsv` and `importCsv` as pure helpers that take a page
+  loader and a chunk writer, or a row parser and a batch handler. They never hold a whole table, they
+  write the header only on the first chunk, and an import collects failures rather than throwing so
+  one bad line does not abandon a file.
+- **Consequences:** Both pipelines are unit-tested with stubs, and a Workflow wraps them by supplying
+  an R2 writer and a paged reader. The Workflow runtime itself is not exercised in the test pool;
+  `introspectWorkflow` would be the way to add that.
+
+## D-054 — Every Worker-owned route must be listed in `run_worker_first`
+
+- **Status:** Accepted · 2026-09-22 · the first concrete recurrence of D-040
+- **Context:** Adding `/stats` for the cache example produced the SPA shell instead of JSON, because
+  `run_worker_first` lists Worker routes positively and `/stats` was not on the list. Nothing errored:
+  the asset layer's SPA fallback answered a request meant for the Worker.
+- **Decision:** Treat the `run_worker_first` list as part of adding a route. The blog now lists
+  `["/", "/health", "/stats", "/api/*", "/admin/api/*"]`, and `CLAUDE.md` tells the next person to
+  add theirs.
+- **Consequences:** The failure mode is a visible wrong-content-type response rather than a silent
+  bypass, which is why D-040 chose positive patterns. A framework-level helper that derives the list
+  from the registered routes would remove the chore, and is worth doing when M6 touches deployment.

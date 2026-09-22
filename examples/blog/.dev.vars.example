@@ -4,3 +4,8 @@ ALLOW_DEV_AUTH=true
 
 # Production: remove the dev adapter and set a real Better Auth secret instead.
 # BETTER_AUTH_SECRET=replace-with-openssl-rand-base64-32
+
+# Pre-signed uploads need an S3 API token (R2 > Manage API tokens) plus the account id.
+R2_ACCOUNT_ID=your-account-id
+R2_ACCESS_KEY_ID=your-access-key-id
+R2_SECRET_ACCESS_KEY=your-secret-access-key

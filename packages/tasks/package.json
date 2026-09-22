@@ -1,0 +1,27 @@
+{
+  "name": "@clango/tasks",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "types": "wrangler types"
+  },
+  "dependencies": {
+    "@clango/core": "workspace:*",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.2.2",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.136.2"
+  }
+}

@@ -3,8 +3,8 @@
 A Django-style framework for Cloudflare Workers. Define models in apps and Clango generates the
 database schema, migrations, a REST API and a full admin panel.
 
-> **Status:** M0–M4 complete: scaffold, models + migrations, generated REST API, admin, and
-> auth + permissions. See `docs/SPEC.md`.
+> **Status:** M0–M5 complete: scaffold, models + migrations, generated REST API, admin,
+> auth + permissions, and files/tasks/cache. See `docs/SPEC.md`.
 
 ## What works today
 

@@ -38,9 +38,12 @@ export {
   SYSTEM_APP_LABEL,
   type AdminConfig,
   type AuthConfig,
+  type CacheConfig,
   type ClangoConfig,
   type DatabaseConfig,
+  type FilesConfig,
   type RegisteredModel,
+  type TasksConfig,
   type Registry,
 } from "./config";
 export { ClangoError, MigrationError, ModelDefinitionError } from "./errors";

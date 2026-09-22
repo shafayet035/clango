@@ -1,6 +1,9 @@
-import { env, exports } from "cloudflare:workers";
-import { applyD1Migrations } from "cloudflare:test";
+import { env } from "cloudflare:workers";
+import { applyD1Migrations, createExecutionContext } from "cloudflare:test";
+
 import { beforeAll, describe, expect, it } from "vitest";
+
+import worker from "../src/index";
 
 const ORIGIN = "https://example.com";
 
@@ -12,7 +15,11 @@ async function call(
   path: string,
   init?: RequestInit,
 ): Promise<{ status: number; body: unknown; headers: Headers }> {
-  const response = await exports.default.fetch(`${ORIGIN}${path}`, init);
+  const response = await worker.fetch(
+    new Request(`${ORIGIN}${path}`, init),
+    env,
+    createExecutionContext(),
+  );
   const text = await response.text();
   const isJson = (response.headers.get("content-type") ?? "").includes("application/json");
   return {

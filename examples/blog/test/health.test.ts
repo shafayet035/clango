@@ -1,6 +1,17 @@
-import { env, exports } from "cloudflare:workers";
-import { applyD1Migrations } from "cloudflare:test";
+import { env } from "cloudflare:workers";
+import { applyD1Migrations, createExecutionContext } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
+
+import worker from "../src/index";
+
+/** Calls the Worker's fetch handler with a test execution context. */
+async function fetchWorker(path: string, init?: RequestInit): Promise<Response> {
+  return worker.fetch(
+    new Request(`https://example.com${path}`, init),
+    env,
+    createExecutionContext(),
+  );
+}
 
 beforeAll(async () => {
   await applyD1Migrations(env.DB_MAIN, env.TEST_MIGRATIONS);
@@ -8,13 +19,13 @@ beforeAll(async () => {
 
 describe("example blog worker", () => {
   it("answers the root route", async () => {
-    const response = await exports.default.fetch("https://example.com/");
+    const response = await fetchWorker("/");
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({ name: "clango-example-blog" });
   });
 
   it("answers /health with the registered models", async () => {
-    const response = await exports.default.fetch("https://example.com/health");
+    const response = await fetchWorker("/health");
     expect(response.status).toBe(200);
     const body = (await response.json()) as { status: string; database: boolean; models: string[] };
     expect(body.status).toBe("ok");

@@ -30,6 +30,12 @@ export const Post = defineModel("blog.Post", {
     slug: fields.slug({ from: "title", unique: true }),
     body: fields.text({ searchable: true, optional: true }),
     excerpt: fields.string({ max: 300, optional: true }),
+    cover: fields.image({
+      optional: true,
+      maxSize: 5_000_000,
+      accept: ["image/png", "image/jpeg"],
+    }),
+    attachment: fields.file({ optional: true }),
     status: fields.choice(["draft", "published"], { default: "draft" }),
     publishedAt: fields.datetime({ optional: true, index: true }),
     author: fields.foreignKey(() => Author, { onDelete: "cascade" }),

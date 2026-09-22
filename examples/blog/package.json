@@ -18,9 +18,13 @@
   "dependencies": {
     "@clango/api": "workspace:*",
     "@clango/auth": "workspace:*",
+    "@clango/cache": "workspace:*",
     "@clango/core": "workspace:*",
+    "@clango/files": "workspace:*",
     "@clango/orm": "workspace:*",
-    "hono": "^4.9.6"
+    "@clango/tasks": "workspace:*",
+    "hono": "^4.9.6",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@clango/admin-api": "workspace:*",
